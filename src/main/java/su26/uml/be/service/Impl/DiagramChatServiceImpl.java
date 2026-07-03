@@ -12,6 +12,8 @@ import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
@@ -232,6 +234,7 @@ public class DiagramChatServiceImpl implements DiagramChatService {
                 state = new java.util.HashMap<>();
                 state.put("nodes", new ArrayList<>());
                 state.put("edges", new ArrayList<>());
+                state.put("diagramType", "activity"); // Mặc định ban đầu
             } else {
                 state = objectMapper.readValue(currentData, Map.class);
             }
@@ -242,8 +245,10 @@ public class DiagramChatServiceImpl implements DiagramChatService {
 
             for (CanvasActionResponse action : actions) {
                 String type = action.getType();
-                Map<String, Object> data = action.getData();
-                if (data == null || type == null) continue;
+                if (type == null || action.getData() == null || !(action.getData() instanceof Map)) continue;
+                
+                @SuppressWarnings("unchecked")
+                Map<String, Object> data = (Map<String, Object>) action.getData();
 
                 String id = (String) data.get("id");
 
@@ -299,6 +304,12 @@ public class DiagramChatServiceImpl implements DiagramChatService {
                 }
             }
 
+            // Tự động nhận diện diagramType dựa trên các node hiện có
+            String detectedType = detectDiagramType(nodes);
+            if (detectedType != null) {
+                state.put("diagramType", detectedType);
+            }
+
             state.put("nodes", nodes);
             state.put("edges", edges);
             return objectMapper.writeValueAsString(state);
@@ -306,6 +317,23 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             log.error("Failed to merge state. Current data: {}, Actions: {}", currentData, actions, e);
             return currentData;
         }
+    }
+
+    private String detectDiagramType(List<Map<String, Object>> nodes) {
+        if (nodes == null || nodes.isEmpty()) return null;
+        
+        for (Map<String, Object> node : nodes) {
+            String type = (String) node.get("type");
+            if (type == null && node.get("data") instanceof Map) {
+                type = (String) ((Map<String, Object>) node.get("data")).get("type");
+            }
+            
+            if ("lifeline".equalsIgnoreCase(type)) return "sequence";
+            if ("cls".equalsIgnoreCase(type)) return "class";
+            if ("usecase".equalsIgnoreCase(type)) return "usecase";
+            if ("component".equalsIgnoreCase(type)) return "component";
+        }
+        return "activity"; // Fallback mặc định
     }
 
     private AiResponseContent parseAiResponse(String rawAnswer) {
@@ -331,29 +359,135 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         try {
             AiResponseContent content = objectMapper.readValue(cleanedJson, AiResponseContent.class);
 
-            // Xử lý từng câu hỏi trong danh sách
-            if (content.getQuestions() != null) {
-                for (AiResponseContent.QuestionContent q : content.getQuestions()) {
-                    if (q.getOptions() != null && !q.getOptions().isEmpty()) {
-                        List<String> options = new ArrayList<>(q.getOptions());
-                        if (!options.contains("Khác")) {
-                            options.add("Khác");
+            // Bổ sung logic: Nếu message trong JSON bị trống nhưng bên ngoài JSON có text, lấy text đó làm message
+            if ((content.getMessage() == null || content.getMessage().isBlank()) && !rawAnswer.equals(cleanedJson)) {
+                String textOnly = rawAnswer.replace("```json", "").replace("```", "").replace(cleanedJson, "").trim();
+                if (!textOnly.isBlank()) {
+                    content.setMessage(textOnly);
+                }
+            }
+
+            // NÂNG CẤP: Nếu AI trả về format lồng questions bên trong actions (type: ask_questions hoặc type: questions)
+            if (content.getActions() != null && (content.getQuestions() == null || content.getQuestions().isEmpty())) {
+                for (CanvasActionResponse action : content.getActions()) {
+                    boolean isQuestionType = "ask_questions".equalsIgnoreCase(action.getType()) || "questions".equalsIgnoreCase(action.getType());
+                    if (isQuestionType && action.getData() != null) {
+                        Object questionsObj = null;
+                        if (action.getData() instanceof Map) {
+                            questionsObj = ((Map<?, ?>) action.getData()).get("questions");
+                            if (questionsObj == null) {
+                                // Nếu data là Map nhưng không có key "questions", có thể data chính là list các câu hỏi (dù hiếm)
+                                log.warn("Action data is Map but no 'questions' key found.");
+                            }
+                        } else if (action.getData() instanceof List) {
+                            // TRƯỜNG HỢP MỚI: data chính là List các câu hỏi
+                            questionsObj = action.getData();
                         }
-                        q.setOptions(options);
+
+                        if (questionsObj instanceof List) {
+                            try {
+                                String questionsJson = objectMapper.writeValueAsString(questionsObj);
+                                List<AiResponseContent.QuestionContent> extractedQuestions = objectMapper.readValue(
+                                    questionsJson, 
+                                    objectMapper.getTypeFactory().constructCollectionType(List.class, AiResponseContent.QuestionContent.class)
+                                );
+                                if (content.getQuestions() == null) {
+                                    content.setQuestions(new ArrayList<>());
+                                }
+                                content.getQuestions().addAll(extractedQuestions);
+                            } catch (Exception e) {
+                                log.warn("Failed to extract nested questions from action: {}", e.getMessage());
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Xử lý từng câu hỏi trong danh sách
+            if (content.getQuestions() != null && !content.getQuestions().isEmpty()) {
+                for (AiResponseContent.QuestionContent q : content.getQuestions()) {
+                    // NÂNG CẤP: Nếu AI trả về câu hỏi nhưng không có options, tự động gợi ý luôn
+                    if (q.getOptions() == null || q.getOptions().isEmpty()) {
+                        List<String> suggested = suggestOptions(q.getTitle());
+                        if (!suggested.isEmpty()) {
+                            q.setOptions(suggested);
+                            q.setType("single_select");
+                        } else {
+                            q.setOptions(Collections.emptyList());
+                            q.setType("text");
+                        }
+                    } else {
+                        // Giữ nguyên options từ AI
+                        q.setOptions(q.getOptions());
                     }
                 }
             } else {
-                content.setQuestions(Collections.emptyList());
+                // TỰ ĐỘNG BÓC TÁCH: Nếu mảng questions trống, quét trong message tìm danh sách đánh số
+                List<AiResponseContent.QuestionContent> extracted = extractQuestionsFromText(content.getMessage());
+                content.setQuestions(extracted);
             }
 
             return content;
         } catch (JsonProcessingException e) {
-            // Fallback: Trả về text thuần nếu không phải JSON
+            // Fallback: Trả về text thuần và cố gắng bóc tách câu hỏi từ đó
+            List<AiResponseContent.QuestionContent> extracted = extractQuestionsFromText(rawAnswer);
             return AiResponseContent.builder()
                     .message(rawAnswer)
-                    .questions(Collections.emptyList())
+                    .questions(extracted)
                     .build();
         }
+    }
+
+    /**
+     * Quét văn bản để tìm các câu hỏi dạng danh sách đánh số (1. , 2., ...) 
+     * để tự động tạo Question Box.
+     */
+    private List<AiResponseContent.QuestionContent> extractQuestionsFromText(String text) {
+        if (text == null || text.isBlank()) return Collections.emptyList();
+
+        List<AiResponseContent.QuestionContent> extracted = new ArrayList<>();
+        // Regex tìm các dòng bắt đầu bằng số và dấu chấm (ví dụ: "1. Bạn muốn...")
+        Pattern questionPattern = Pattern.compile("(?m)^\\s*\\d+[.)]\\s*(.*\\?)");
+        Matcher matcher = questionPattern.matcher(text);
+
+        while (matcher.find()) {
+            String qText = matcher.group(1).trim();
+            if (!qText.isBlank()) {
+                // Tự động gợi ý options dựa trên nội dung câu hỏi để bro được "chọn" thay vì nhập tay
+                List<String> options = suggestOptions(qText);
+                
+                extracted.add(AiResponseContent.QuestionContent.builder()
+                        .title(qText)
+                        .type(options.isEmpty() ? "text" : "single_select")
+                        .options(options)
+                        .build());
+            }
+        }
+        
+        return extracted;
+    }
+
+    /**
+     * Gợi ý các lựa chọn (options) thông minh dựa trên nội dung câu hỏi 
+     * để người dùng có thể chọn nhanh thay vì nhập tay.
+     */
+    private List<String> suggestOptions(String question) {
+        String q = question.toLowerCase();
+        List<String> options = new ArrayList<>();
+
+        if (q.contains("actor") || q.contains("tác nhân")) {
+            options.addAll(List.of("Khách hàng", "Nhân viên", "Quản lý", "Hệ thống bên ngoài"));
+        } else if (q.contains("chức năng") || q.contains("use case")) {
+            options.addAll(List.of("Đăng nhập/Đăng ký", "Quản lý hồ sơ", "Tìm kiếm", "Báo cáo thống kê"));
+        } else if (q.contains("thanh toán")) {
+            options.addAll(List.of("Thanh toán tiền mặt", "Chuyển khoản ngân hàng", "Ví điện tử (Momo/ZaloPay)", "Thẻ tín dụng"));
+        } else if (q.contains("phạm vi") || q.contains("boundary")) {
+            options.addAll(List.of("Chỉ hệ thống nội bộ", "Hệ thống công khai (Web/App)", "Bao gồm cả quản lý kho", "Tất cả các bên liên quan"));
+        } else if (q.contains("có") && q.contains("không")) {
+            options.addAll(List.of("Có, chắc chắn rồi", "Không, bỏ qua đi", "Để tôi suy nghĩ thêm"));
+        }
+
+        return options;
     }
 
     /**
@@ -387,9 +521,17 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         @lombok.NoArgsConstructor
         @lombok.AllArgsConstructor
         public static class QuestionContent {
+            @JsonAlias("question")
+            @JsonProperty("title")
             private String title;
             private String type;
             private List<String> options;
+            
+            // Setter bổ sung để hỗ trợ cả field "question" nếu AI trả về
+            @JsonProperty("question")
+            public void setQuestion(String question) {
+                this.title = question;
+            }
         }
     }
 

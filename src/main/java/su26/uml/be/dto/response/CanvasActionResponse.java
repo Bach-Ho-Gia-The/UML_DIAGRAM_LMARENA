@@ -12,5 +12,5 @@ import java.util.Map;
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class CanvasActionResponse {
     String type; // ADD_NODE, UPDATE_NODE, DELETE_NODE, ADD_EDGE, DELETE_EDGE
-    Map<String, Object> data;
+    Object data;
 }
