@@ -28,6 +28,16 @@ public class DiagramChatHistoryResponse {
 
         String content;
 
+        AiResponseKind kind;
+
+        String summary;
+
+        List<AiNodeDto> nodes;
+
+        List<AiEdgeDto> edges;
+
+        List<AiQuestionDto> questions;
+
         String modelName;
 
         LocalDateTime createdAt;

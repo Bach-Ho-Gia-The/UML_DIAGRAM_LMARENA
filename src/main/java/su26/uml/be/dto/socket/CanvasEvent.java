@@ -15,6 +15,7 @@ import java.util.Map;
 public class CanvasEvent {
     private String sheetId;
     private String senderId; // ID của người gửi để tránh broadcast lại cho chính họ
+    private String type; // move, add, remove, update, layout
     private List<Map<String, Object>> nodes;
     private List<Map<String, Object>> edges;
 }

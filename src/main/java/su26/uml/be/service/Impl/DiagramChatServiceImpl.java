@@ -1,19 +1,22 @@
 package su26.uml.be.service.Impl;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 
 import org.springframework.stereotype.Service;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import su26.uml.be.config.anythingllm.AnythingLlmClient;
 import su26.uml.be.config.anythingllm.AnythingLlmProperties;
 import su26.uml.be.dto.request.DiagramChatRequest;
-import su26.uml.be.dto.response.AnythingLlmChatResponse;
+import su26.uml.be.dto.response.AiResponseKind;
 import su26.uml.be.dto.response.ApiResponse;
 import su26.uml.be.dto.response.ChatSessionResponse;
 import su26.uml.be.dto.response.DiagramChatHistoryResponse;
@@ -28,6 +31,7 @@ import su26.uml.be.repository.AiChatMessageRepository;
 import su26.uml.be.repository.AiChatSessionRepository;
 import su26.uml.be.repository.UserRepository;
 import su26.uml.be.service.DiagramChatService;
+import su26.uml.be.service.ai.UmlArchitect;
 
 @Service
 @RequiredArgsConstructor
@@ -40,14 +44,15 @@ public class DiagramChatServiceImpl implements DiagramChatService {
     private static final String SESSION_STATUS_ACTIVE = "ACTIVE";
     private static final String DEFAULT_SESSION_TITLE = "New chat";
     private static final int SOURCE_SNIPPET_MAX_LENGTH = 500;
-    private static final int MAX_RETRY_ATTEMPTS = 2;
-    private static final long RETRY_DELAY_MILLIS = 800L;
+    private static final int MAX_RETRIES = 3;
 
     private final AnythingLlmClient anythingLlmClient;
     private final AnythingLlmProperties anythingLlmProperties;
     private final AiChatSessionRepository chatSessionRepository;
     private final AiChatMessageRepository chatMessageRepository;
     private final UserRepository userRepository;
+    private final ObjectMapper objectMapper;
+    private final UmlArchitect umlArchitect;
 
     @Override
     public ApiResponse<DiagramChatResponse> chat(String email, DiagramChatRequest request) {
@@ -59,47 +64,114 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         try {
             AiChatSessionDocument session = resolveSession(userId, request.getSessionId());
 
-            AnythingLlmChatResponse anythingResponse = callAnythingLlmWithRetry(
-                    request.getMessage(),
-                    session.getAnythingSessionId()
-            );
+            // Gọi AI với cơ chế Error Reflection
+            DiagramChatResponse response = callAiWithRetry(request.getMessage(), MAX_RETRIES);
 
-            String rawAnswer = cleanAnswer(anythingResponse.getTextResponse());
-
-            if (rawAnswer.isBlank()) {
+            if (response == null) {
                 throw new AppException(ErrorCode.ANYTHING_LLM_ERROR);
             }
 
-            updateSessionTitleIfNeeded(session, request.getMessage());
+            // Đồng bộ sessionId
+            response.setSessionId(session.getAnythingSessionId());
 
-            List<AiSourceDocument> sourceDocuments = mapSources(anythingResponse.getSources());
+            updateSessionTitleIfNeeded(session, request.getMessage());
 
             saveUserMessage(userId, session.getId(), request.getMessage());
 
+            // Lưu phản hồi dưới dạng JSON String vào DB
+            String rawAnswer = objectMapper.writeValueAsString(response);
             saveAssistantMessage(
                     userId,
                     session.getId(),
                     rawAnswer,
                     anythingLlmProperties.modelName(),
-                    sourceDocuments
+                    response.getSources()
             );
 
             session.setUpdatedAt(LocalDateTime.now());
             chatSessionRepository.save(session);
-
-            DiagramChatResponse response = DiagramChatResponse.builder()
-                    .answer(rawAnswer)
-                    .sessionId(session.getAnythingSessionId())
-                    .sources(anythingResponse.getSources() == null ? List.of() : anythingResponse.getSources())
-                    .build();
 
             return ApiResponse.success("Chat successfully", response);
 
         } catch (AppException exception) {
             throw exception;
         } catch (Exception exception) {
+            log.error("AI Chat processing error", exception);
             throw new AppException(ErrorCode.CHAT_SESSION_PROCESSING_ERROR);
         }
+    }
+
+    private DiagramChatResponse callAiWithRetry(String userPrompt, int maxRetries) {
+        String currentPrompt = userPrompt;
+        Exception lastException = null;
+
+        for (int i = 0; i < maxRetries; i++) {
+            try {
+                String rawResponse = umlArchitect.chat(currentPrompt);
+                return parseAndValidateAiResponse(rawResponse);
+            } catch (Exception e) {
+                log.warn("AI Chat retry {}/{} due to error: {}", i + 1, maxRetries, e.getMessage());
+                lastException = e;
+                // Error Reflection: Gửi lại lỗi để AI tự sửa
+                currentPrompt = userPrompt + "\n\n" +
+                        "CẢNH BÁO: Lần trước bạn đã trả về kết quả gây lỗi hệ thống.\n" +
+                        "Lỗi: " + e.getMessage() + "\n" +
+                        "Hãy sửa lại và chỉ trả về đúng JSON hợp lệ theo định dạng đã quy định.";
+            }
+        }
+        log.error("AI Chat failed after {} retries", maxRetries, lastException);
+        return null;
+    }
+
+    private DiagramChatResponse parseAndValidateAiResponse(String rawResponse) throws Exception {
+        if (rawResponse == null || rawResponse.isBlank()) {
+            throw new RuntimeException("AI returned empty response");
+        }
+
+        // 1. Loại bỏ các tag suy nghĩ <think>...</think> (nếu có từ DeepSeek)
+        String cleanJson = rawResponse.replaceAll("(?s)<think>.*?</think>", "").trim();
+
+        // 2. Chuẩn hóa dấu ngoặc kép (xử lý trường hợp AI nhả ra dấu ngoặc kép thông minh/curly quotes)
+        cleanJson = cleanJson.replace("“", "\"").replace("”", "\"").replace("‘", "'").replace("’", "'");
+
+        // 3. Trích xuất JSON từ Markdown code blocks (nếu có)
+        Pattern pattern = Pattern.compile("(?s)```(?:json)?\\s*(.*?)\\s*```");
+        Matcher matcher = pattern.matcher(cleanJson);
+        if (matcher.find()) {
+            cleanJson = matcher.group(1).trim();
+        } else {
+            // 4. Nếu không có markdown, cố gắng tìm khối { ... } hoặc [ ... ] lớn nhất để loại bỏ văn bản thừa
+            int firstBrace = cleanJson.indexOf('{');
+            int firstBracket = cleanJson.indexOf('[');
+            int lastBrace = cleanJson.lastIndexOf('}');
+            int lastBracket = cleanJson.lastIndexOf(']');
+
+            int start = -1;
+            int end = -1;
+
+            if (firstBrace != -1 && (firstBracket == -1 || firstBrace < firstBracket)) {
+                start = firstBrace;
+                end = lastBrace;
+            } else if (firstBracket != -1) {
+                start = firstBracket;
+                end = lastBracket;
+            }
+
+            if (start != -1 && end != -1 && end > start) {
+                cleanJson = cleanJson.substring(start, end + 1).trim();
+            }
+        }
+
+        // 5. Xử lý trường hợp AI nhả ra mảng [ { ... } ]
+        if (cleanJson.startsWith("[")) {
+            List<DiagramChatResponse> list = objectMapper.readValue(cleanJson, new TypeReference<List<DiagramChatResponse>>() {});
+            if (list != null && !list.isEmpty()) {
+                return list.get(0);
+            }
+        }
+
+        // 4. Parse JSON Object thông thường
+        return objectMapper.readValue(cleanJson, DiagramChatResponse.class);
     }
 
     @Override
@@ -147,13 +219,20 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         DiagramChatHistoryResponse response = DiagramChatHistoryResponse.builder()
                 .sessionId(session.getAnythingSessionId())
                 .messages(messages.stream()
-                        .map(message -> DiagramChatHistoryResponse.MessageItem.builder()
-                                .role(message.getRole())
-                                .content(message.getContent())
-                                .modelName(message.getModelName())
-                                .createdAt(message.getCreatedAt())
-                                .build()
-                        )
+                        .map(message -> {
+                            DiagramChatResponse parsed = parseAiResponse(message.getContent());
+                            return DiagramChatHistoryResponse.MessageItem.builder()
+                                    .role(message.getRole())
+                                    .content(message.getContent())
+                                    .kind(parsed.getKind())
+                                    .summary(parsed.getSummary())
+                                    .nodes(parsed.getNodes())
+                                    .edges(parsed.getEdges())
+                                    .questions(parsed.getQuestions())
+                                    .modelName(message.getModelName())
+                                    .createdAt(message.getCreatedAt())
+                                    .build();
+                        })
                         .toList())
                 .build();
 
@@ -183,50 +262,6 @@ public class DiagramChatServiceImpl implements DiagramChatService {
                         .updatedAt(now)
                         .build()
         );
-    }
-
-    private AnythingLlmChatResponse callAnythingLlmWithRetry(String prompt, String sessionId) {
-        for (int attempt = 1; attempt <= MAX_RETRY_ATTEMPTS; attempt++) {
-            try {
-                AnythingLlmChatResponse response =
-                        anythingLlmClient.chat(prompt, sessionId);
-
-                if (response == null) {
-                    throw new AppException(ErrorCode.ANYTHING_LLM_ERROR);
-                }
-
-                if (response.getError() != null && !response.getError().isBlank()) {
-                    throw new AppException(ErrorCode.ANYTHING_LLM_ERROR);
-                }
-
-                return response;
-
-            } catch (AppException exception) {
-                if (attempt == MAX_RETRY_ATTEMPTS) {
-                    throw exception;
-                }
-
-                sleepBeforeRetry();
-
-            } catch (Exception exception) {
-                if (attempt == MAX_RETRY_ATTEMPTS) {
-                    throw new AppException(ErrorCode.ANYTHING_LLM_ERROR);
-                }
-
-                sleepBeforeRetry();
-            }
-        }
-
-        throw new AppException(ErrorCode.ANYTHING_LLM_ERROR);
-    }
-
-    private void sleepBeforeRetry() {
-        try {
-            Thread.sleep(RETRY_DELAY_MILLIS);
-        } catch (InterruptedException exception) {
-            Thread.currentThread().interrupt();
-            throw new AppException(ErrorCode.ANYTHING_LLM_ERROR);
-        }
     }
 
     private void saveUserMessage(String userId, String chatSessionId, String content) {
@@ -263,37 +298,6 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         );
     }
 
-    private String cleanAnswer(String answer) {
-        if (answer == null) {
-            return "";
-        }
-
-        return answer
-                .replaceAll("(?s)<think>.*?</think>", "")
-                .replaceAll("\\[END CONTEXT \\d+\\]", "") // Xóa markers của AnythingLLM
-                .replaceAll("\\[\\d+\\]", "")             // Xóa các trích dẫn [1], [2]...
-                .trim();
-    }
-
-    private List<AiSourceDocument> mapSources(List<Map<String, Object>> sources) {
-        if (sources == null || sources.isEmpty()) {
-            return List.of();
-        }
-
-        return sources.stream()
-                .map(this::mapSource)
-                .toList();
-    }
-
-    private AiSourceDocument mapSource(Map<String, Object> source) {
-        return AiSourceDocument.builder()
-                .title(toStringValue(source.get("title")))
-                .url(toStringValue(source.get("url")))
-                .score(toBigDecimal(source.get("score")))
-                .snippet(shorten(toStringValue(source.get("text")), SOURCE_SNIPPET_MAX_LENGTH))
-                .build();
-    }
-
     private ChatSessionResponse mapSessionResponse(AiChatSessionDocument session) {
         return ChatSessionResponse.builder()
                 .sessionId(session.getAnythingSessionId())
@@ -316,22 +320,6 @@ public class DiagramChatServiceImpl implements DiagramChatService {
     private void validateChatRequest(DiagramChatRequest request) {
         if (request == null || request.getMessage() == null || request.getMessage().isBlank()) {
             throw new AppException(ErrorCode.CHAT_MESSAGE_REQUIRED);
-        }
-    }
-
-    private String toStringValue(Object value) {
-        return value == null ? null : value.toString();
-    }
-
-    private BigDecimal toBigDecimal(Object value) {
-        if (value == null) {
-            return null;
-        }
-
-        try {
-            return new BigDecimal(value.toString());
-        } catch (Exception exception) {
-            return null;
         }
     }
 
@@ -379,6 +367,26 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         }
 
         return title.substring(0, maxLength).trim() + "...";
+    }
+
+    private DiagramChatResponse parseAiResponse(String content) {
+        if (content == null || content.isBlank()) {
+            return DiagramChatResponse.builder()
+                    .kind(AiResponseKind.REPLY)
+                    .answer("")
+                    .build();
+        }
+
+        try {
+            // Bây giờ DB lưu thẳng JSON string của DiagramChatResponse
+            return objectMapper.readValue(content, DiagramChatResponse.class);
+        } catch (Exception e) {
+            // Fallback nếu dữ liệu cũ không phải JSON hoặc parse lỗi
+            return DiagramChatResponse.builder()
+                    .kind(AiResponseKind.REPLY)
+                    .answer(content)
+                    .build();
+        }
     }
 
     private String removeSimplePrefix(String title) {
