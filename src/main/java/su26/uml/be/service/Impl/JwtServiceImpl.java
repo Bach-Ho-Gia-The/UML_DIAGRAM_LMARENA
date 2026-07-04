@@ -84,12 +84,12 @@ public class JwtServiceImpl implements JwtService {
         JWSVerifier verifier = new MACVerifier(jwtProperties.signerKey().getBytes());
 
         if (!signedJWT.verify(verifier)) {
-            throw new RuntimeException("Invalid token signature");
+            throw new su26.uml.be.exception.AppException(su26.uml.be.exception.ErrorCode.UNAUTHENTICATED);
         }
 
         Date expirationTime = signedJWT.getJWTClaimsSet().getExpirationTime();
         if (expirationTime == null || expirationTime.before(new Date())) {
-            throw new RuntimeException("Token expired");
+            throw new su26.uml.be.exception.AppException(su26.uml.be.exception.ErrorCode.UNAUTHENTICATED);
         }
 
         return signedJWT.getJWTClaimsSet();

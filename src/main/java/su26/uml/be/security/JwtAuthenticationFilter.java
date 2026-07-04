@@ -104,7 +104,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             log.error("Failed to authenticate JWT token: {}", e.getMessage());
             cookieUtils.clearAccessTokenCookie(response);
             cookieUtils.clearRefreshTokenCookie(response);
-            handlerExceptionResolver.resolveException(request, response, null, e);
+            handlerExceptionResolver.resolveException(request, response, null, new su26.uml.be.exception.AppException(su26.uml.be.exception.ErrorCode.UNAUTHENTICATED));
             return;
         }
 

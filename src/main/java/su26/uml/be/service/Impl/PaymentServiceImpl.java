@@ -4,7 +4,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import su26.uml.be.dto.payment.PaymentResponse;
 import su26.uml.be.dto.payment.PaymentStatusResponse;
 import su26.uml.be.entity.PaymentTransaction;
@@ -28,6 +27,7 @@ import vn.payos.model.webhooks.WebhookData;
 import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.Optional;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -56,15 +56,16 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
-    @Transactional
-    public PaymentResponse createPaymentLink(User user, Long planId) {
+    public PaymentResponse createPaymentLink(User user, UUID planId) {
         Plan plan = planRepository.findById(planId)
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_NOT_FOUND));
 
         // Generate a unique order code for the transaction
-        // Use current timestamp + 2 random digits to ensure uniqueness and fit in 15 digits
+        // PayOS requires orderCode < 9,007,199,254,740,991 (JS MAX_SAFE_INTEGER)
+        // Use epoch seconds (10 digits) + 2 random digits = 12 digits max → safe
         String randomSuffix = String.format("%02d", new java.util.Random().nextInt(100));
-        Long orderCode = Long.parseLong(System.currentTimeMillis() + randomSuffix);
+        long epochSeconds = System.currentTimeMillis() / 1000; // 10 chữ số
+        Long orderCode = Long.parseLong(epochSeconds + randomSuffix); // tối đa 12 chữ số
 
         PaymentTransaction transaction = PaymentTransaction.builder()
                 .orderCode(orderCode)
@@ -88,12 +89,14 @@ public class PaymentServiceImpl implements PaymentService {
                     ? safeDescription.substring(0, 25)
                     : safeDescription;
 
-            log.info("Creating PayOS payment: orderCode={}, amount={}, description='{}'",
-                    orderCode, plan.getPrice(), description);
+            long amountInVND = (long) (plan.getPrice() * 25400);
+
+            log.info("Creating PayOS payment: orderCode={}, amountInVND={}, description='{}'",
+                    orderCode, amountInVND, description);
 
             CreatePaymentLinkRequest paymentData = CreatePaymentLinkRequest.builder()
                     .orderCode(orderCode)
-                    .amount(plan.getPrice().longValue())
+                    .amount(amountInVND)
                     .description(description)
                     .returnUrl(returnUrl)
                     .cancelUrl(cancelUrl)
@@ -120,7 +123,6 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
-    @Transactional
     public void processWebhook(WebhookData webhookData) {
         try {
             Long orderCode = webhookData.getOrderCode();
