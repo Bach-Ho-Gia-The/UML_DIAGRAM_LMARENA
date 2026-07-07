@@ -122,6 +122,12 @@ public enum ErrorCode {
     // SHEET ERRORS
     SHEET_NOT_FOUND(1900, "Không tìm thấy trang biểu đồ", HttpStatus.NOT_FOUND),
     SHEET_NAME_REQUIRED(1901, "Tên trang không được để trống", HttpStatus.BAD_REQUEST),
+
+    // PAYMENT ERRORS
+    PLAN_NOT_FOUND(2100, "Gói dịch vụ không tồn tại", HttpStatus.NOT_FOUND),
+    PAYMENT_LINK_CREATION_FAILED(2101, "Không thể tạo liên kết thanh toán, vui lòng thử lại", HttpStatus.INTERNAL_SERVER_ERROR),
+    TRANSACTION_NOT_FOUND(2102, "Không tìm thấy giao dịch", HttpStatus.NOT_FOUND),
+    PAYMENT_ALREADY_PROCESSED(2103, "Giao dịch đã được xử lý trước đó", HttpStatus.BAD_REQUEST),
     ;
 
     private int code;
