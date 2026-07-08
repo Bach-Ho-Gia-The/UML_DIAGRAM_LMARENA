@@ -1,6 +1,7 @@
 package su26.uml.be.service.Impl;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -68,27 +69,32 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             StringBuilder promptBuilder = new StringBuilder();
             
             if (request.getCurrentNodes() != null && !request.getCurrentNodes().isEmpty()) {
-                promptBuilder.append("--- THÔNG TIN CANVAS HIỆN TẠI ---\n");
-                promptBuilder.append("Dưới đây là danh sách các Node và Edge đang có trên màn hình. ");
-                promptBuilder.append("Hãy giữ nguyên ID của chúng nếu không có yêu cầu thay đổi hoặc xóa.\n\n");
-                
-                promptBuilder.append("Nodes:\n");
+                promptBuilder.append("--- CANVAS CONTEXT (SHORTHAND) ---\n");
                 for (var n : request.getCurrentNodes()) {
-                    promptBuilder.append(String.format("- ID: %s, Loại: %s, Tên: %s", n.getId(), n.getType(), n.getLabel()));
-                    if (n.getStereotype() != null) promptBuilder.append(", Stereotype: ").append(n.getStereotype());
-                    if (n.getAttributes() != null && !n.getAttributes().isEmpty()) promptBuilder.append(", Thuộc tính: ").append(n.getAttributes());
-                    if (n.getMethods() != null && !n.getMethods().isEmpty()) promptBuilder.append(", Phương thức: ").append(n.getMethods());
+                    promptBuilder.append(String.format("%s:%s(%s)", n.getId(), n.getType(), n.getLabel()));
+                    if (n.getStereotype() != null) promptBuilder.append("<<").append(n.getStereotype()).append(">>");
+                    
+                    List<String> details = new ArrayList<>();
+                    if (n.getAttributes() != null && !n.getAttributes().isEmpty()) 
+                        details.add("a:[" + String.join(",", n.getAttributes()) + "]");
+                    if (n.getMethods() != null && !n.getMethods().isEmpty()) 
+                        details.add("m:[" + String.join(",", n.getMethods()) + "]");
+                    
+                    if (!details.isEmpty()) {
+                        promptBuilder.append("{").append(String.join(",", details)).append("}");
+                    }
                     promptBuilder.append("\n");
                 }
                 
                 if (request.getCurrentEdges() != null && !request.getCurrentEdges().isEmpty()) {
-                    promptBuilder.append("\nEdges:\n");
+                    promptBuilder.append("Edges: ");
                     for (var e : request.getCurrentEdges()) {
-                        promptBuilder.append(String.format("- ID: %s, Từ: %s, Đến: %s, Quan hệ: %s, Nhãn: %s\n", 
-                            e.getId(), e.getSource(), e.getTarget(), e.getRelation(), e.getLabel()));
+                        promptBuilder.append(String.format("[%s:%s->%s(%s)] ", 
+                            e.getId(), e.getSource(), e.getTarget(), e.getRelation()));
                     }
+                    promptBuilder.append("\n");
                 }
-                promptBuilder.append("\n-------------------------------\n\n");
+                promptBuilder.append("----------------------------------\n\n");
             }
 
             promptBuilder.append("YÊU CẦU CỦA NGƯỜI DÙNG: ").append(request.getMessage()).append("\n\n");
