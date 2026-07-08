@@ -41,6 +41,7 @@ public class ProjectServiceImpl implements ProjectService {
     ProjectVersionRepository projectVersionRepository;
     SheetRepository sheetRepository;
     ProjectMapper projectMapper;
+    su26.uml.be.service.SocketService socketService;
     ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -81,13 +82,38 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     public ApiResponse<ProjectResponse> updateProject(UUID projectId, String email, ProjectRequest request) {
-        Project project = getProjectAndValidateOwnership(projectId, email);
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new AppException(ErrorCode.PROJECT_NOT_FOUND));
+
+        if (project.isDeleted()) {
+            throw new AppException(ErrorCode.PROJECT_NOT_FOUND);
+        }
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        boolean isAdmin = user.getRole().getRoleName().equals("ADMIN");
+        boolean isOwner = project.getUser().getEmail().equals(email);
+
+        // ONLY Owner or Admin can update project
+        if (!isAdmin && !isOwner) {
+            throw new AppException(ErrorCode.PROJECT_ACCESS_DENIED);
+        }
+
         projectMapper.updateProject(request, project);
         if (request.getIsDraft() != null) {
             project.setDraft(request.getIsDraft());
         }
         if (request.getPublicAccess() != null) {
+            boolean wasPublic = Boolean.TRUE.equals(project.getPublicAccess());
+            boolean isNowPublic = Boolean.TRUE.equals(request.getPublicAccess());
+            
             project.setPublicAccess(request.getPublicAccess());
+            
+            // If changed from Public to Private, kick everyone out
+            if (wasPublic && !isNowPublic) {
+                socketService.broadcastCollabDisabled(projectId);
+            }
         }
         Project updatedProject = projectRepository.save(project);
 

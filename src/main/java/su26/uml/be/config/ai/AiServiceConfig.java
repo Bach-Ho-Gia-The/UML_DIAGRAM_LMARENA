@@ -37,6 +37,7 @@ public class AiServiceConfig {
                 .modelName(properties.workspaceSlug())
                 .temperature(0.0)
                 .maxTokens(4096)
+                .timeout(Duration.ofMinutes(5)) // Tăng timeout lên 5 phút để tránh lỗi SocketTimeoutException
                 .logRequests(true)
                 .logResponses(true)
                 .build();

@@ -1,8 +1,16 @@
 package su26.uml.be.dto.request;
 
+import java.util.List;
+
 import jakarta.validation.constraints.NotBlank;
-import lombok.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import su26.uml.be.dto.response.AiEdgeDto;
+import su26.uml.be.dto.response.AiNodeDto;
 
 @Data
 @AllArgsConstructor
@@ -16,5 +24,8 @@ public class DiagramChatRequest {
         String sheetId;
 
         @NotBlank(message = "CHAT_MESSAGE_REQUIRED")
-        String message;
+    String message;
+
+    List<AiNodeDto> currentNodes;
+    List<AiEdgeDto> currentEdges;
 }

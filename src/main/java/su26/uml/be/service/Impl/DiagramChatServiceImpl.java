@@ -64,8 +64,39 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         try {
             AiChatSessionDocument session = resolveSession(userId, request.getSessionId());
 
+            // Xây dựng prompt với context được định dạng dễ đọc cho AI
+            StringBuilder promptBuilder = new StringBuilder();
+            
+            if (request.getCurrentNodes() != null && !request.getCurrentNodes().isEmpty()) {
+                promptBuilder.append("--- THÔNG TIN CANVAS HIỆN TẠI ---\n");
+                promptBuilder.append("Dưới đây là danh sách các Node và Edge đang có trên màn hình. ");
+                promptBuilder.append("Hãy giữ nguyên ID của chúng nếu không có yêu cầu thay đổi hoặc xóa.\n\n");
+                
+                promptBuilder.append("Nodes:\n");
+                for (var n : request.getCurrentNodes()) {
+                    promptBuilder.append(String.format("- ID: %s, Loại: %s, Tên: %s", n.getId(), n.getType(), n.getLabel()));
+                    if (n.getStereotype() != null) promptBuilder.append(", Stereotype: ").append(n.getStereotype());
+                    if (n.getAttributes() != null && !n.getAttributes().isEmpty()) promptBuilder.append(", Thuộc tính: ").append(n.getAttributes());
+                    if (n.getMethods() != null && !n.getMethods().isEmpty()) promptBuilder.append(", Phương thức: ").append(n.getMethods());
+                    promptBuilder.append("\n");
+                }
+                
+                if (request.getCurrentEdges() != null && !request.getCurrentEdges().isEmpty()) {
+                    promptBuilder.append("\nEdges:\n");
+                    for (var e : request.getCurrentEdges()) {
+                        promptBuilder.append(String.format("- ID: %s, Từ: %s, Đến: %s, Quan hệ: %s, Nhãn: %s\n", 
+                            e.getId(), e.getSource(), e.getTarget(), e.getRelation(), e.getLabel()));
+                    }
+                }
+                promptBuilder.append("\n-------------------------------\n\n");
+            }
+
+            promptBuilder.append("YÊU CẦU CỦA NGƯỜI DÙNG: ").append(request.getMessage()).append("\n\n");
+            promptBuilder.append("LƯU Ý QUAN TRỌNG: Bạn phải trả về TOÀN BỘ sơ đồ cuối cùng (bao gồm cả các node cũ muốn giữ lại và các node mới). ");
+            promptBuilder.append("Nếu một node có trong danh sách trên nhưng không có trong kết quả JSON của bạn, nó sẽ bị xóa khỏi màn hình.");
+
             // Gọi AI với cơ chế Error Reflection
-            DiagramChatResponse response = callAiWithRetry(request.getMessage(), MAX_RETRIES);
+            DiagramChatResponse response = callAiWithRetry(promptBuilder.toString(), MAX_RETRIES);
 
             if (response == null) {
                 throw new AppException(ErrorCode.ANYTHING_LLM_ERROR);
