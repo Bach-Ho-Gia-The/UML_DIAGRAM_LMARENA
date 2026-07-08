@@ -1,6 +1,7 @@
 package su26.uml.be.service.Impl;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -64,8 +65,44 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         try {
             AiChatSessionDocument session = resolveSession(userId, request.getSessionId());
 
+            // Xây dựng prompt với context được định dạng dễ đọc cho AI
+            StringBuilder promptBuilder = new StringBuilder();
+            
+            if (request.getCurrentNodes() != null && !request.getCurrentNodes().isEmpty()) {
+                promptBuilder.append("--- CANVAS CONTEXT (SHORTHAND) ---\n");
+                for (var n : request.getCurrentNodes()) {
+                    promptBuilder.append(String.format("%s:%s(%s)", n.getId(), n.getType(), n.getLabel()));
+                    if (n.getStereotype() != null) promptBuilder.append("<<").append(n.getStereotype()).append(">>");
+                    
+                    List<String> details = new ArrayList<>();
+                    if (n.getAttributes() != null && !n.getAttributes().isEmpty()) 
+                        details.add("a:[" + String.join(",", n.getAttributes()) + "]");
+                    if (n.getMethods() != null && !n.getMethods().isEmpty()) 
+                        details.add("m:[" + String.join(",", n.getMethods()) + "]");
+                    
+                    if (!details.isEmpty()) {
+                        promptBuilder.append("{").append(String.join(",", details)).append("}");
+                    }
+                    promptBuilder.append("\n");
+                }
+                
+                if (request.getCurrentEdges() != null && !request.getCurrentEdges().isEmpty()) {
+                    promptBuilder.append("Edges: ");
+                    for (var e : request.getCurrentEdges()) {
+                        promptBuilder.append(String.format("[%s:%s->%s(%s)] ", 
+                            e.getId(), e.getSource(), e.getTarget(), e.getRelation()));
+                    }
+                    promptBuilder.append("\n");
+                }
+                promptBuilder.append("----------------------------------\n\n");
+            }
+
+            promptBuilder.append("YÊU CẦU CỦA NGƯỜI DÙNG: ").append(request.getMessage()).append("\n\n");
+            promptBuilder.append("LƯU Ý QUAN TRỌNG: Bạn phải trả về TOÀN BỘ sơ đồ cuối cùng (bao gồm cả các node cũ muốn giữ lại và các node mới). ");
+            promptBuilder.append("Nếu một node có trong danh sách trên nhưng không có trong kết quả JSON của bạn, nó sẽ bị xóa khỏi màn hình.");
+
             // Gọi AI với cơ chế Error Reflection
-            DiagramChatResponse response = callAiWithRetry(request.getMessage(), MAX_RETRIES);
+            DiagramChatResponse response = callAiWithRetry(promptBuilder.toString(), MAX_RETRIES);
 
             if (response == null) {
                 throw new AppException(ErrorCode.ANYTHING_LLM_ERROR);

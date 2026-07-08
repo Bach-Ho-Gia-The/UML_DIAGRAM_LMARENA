@@ -45,7 +45,7 @@ public class AnythingLlmClient {
                 .bodyValue(body)
                 .retrieve()
                 .bodyToMono(AnythingLlmChatResponse.class)
-                .block(Duration.ofSeconds(120));
+                .block(Duration.ofMinutes(5));
     }
 
     // ─── System Config ───────────────────────────────────────────
