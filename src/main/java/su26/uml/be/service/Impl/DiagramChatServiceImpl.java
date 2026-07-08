@@ -5,6 +5,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+import com.knuddels.jtokkit.Encodings;
+import com.knuddels.jtokkit.api.Encoding;
+import com.knuddels.jtokkit.api.EncodingRegistry;
+import com.knuddels.jtokkit.api.ModelType;
+import dev.langchain4j.data.message.AiMessage;
+import dev.langchain4j.model.chat.response.ChatResponse;
+import dev.langchain4j.model.output.TokenUsage;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -14,7 +21,6 @@ import java.util.regex.Pattern;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import su26.uml.be.config.anythingllm.AnythingLlmClient;
 import su26.uml.be.config.anythingllm.AnythingLlmProperties;
 import su26.uml.be.dto.request.DiagramChatRequest;
 import su26.uml.be.dto.response.AiResponseKind;
@@ -26,6 +32,7 @@ import su26.uml.be.entity.AiChatMessageDocument;
 import su26.uml.be.entity.AiChatSessionDocument;
 import su26.uml.be.entity.AiSourceDocument;
 import su26.uml.be.entity.User;
+import su26.uml.be.enums.EstimationMethod;
 import su26.uml.be.exception.AppException;
 import su26.uml.be.exception.ErrorCode;
 import su26.uml.be.repository.AiChatMessageRepository;
@@ -47,13 +54,13 @@ public class DiagramChatServiceImpl implements DiagramChatService {
     private static final int SOURCE_SNIPPET_MAX_LENGTH = 500;
     private static final int MAX_RETRIES = 3;
 
-    private final AnythingLlmClient anythingLlmClient;
     private final AnythingLlmProperties anythingLlmProperties;
     private final AiChatSessionRepository chatSessionRepository;
     private final AiChatMessageRepository chatMessageRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
     private final UmlArchitect umlArchitect;
+    private final AiBillingEventPublisher aiBillingEventPublisher;
 
     @Override
     public ApiResponse<DiagramChatResponse> chat(String email, DiagramChatRequest request) {
@@ -101,12 +108,14 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             promptBuilder.append("LƯU Ý QUAN TRỌNG: Bạn phải trả về TOÀN BỘ sơ đồ cuối cùng (bao gồm cả các node cũ muốn giữ lại và các node mới). ");
             promptBuilder.append("Nếu một node có trong danh sách trên nhưng không có trong kết quả JSON của bạn, nó sẽ bị xóa khỏi màn hình.");
 
-            // Gọi AI với cơ chế Error Reflection
-            DiagramChatResponse response = callAiWithRetry(promptBuilder.toString(), MAX_RETRIES);
+            // Gọi AI với cơ chế Error Reflection + token extraction
+            AiChatResult result = callAiWithRetry(promptBuilder.toString(), MAX_RETRIES);
 
-            if (response == null) {
+            if (result == null) {
                 throw new AppException(ErrorCode.ANYTHING_LLM_ERROR);
             }
+
+            DiagramChatResponse response = result.diagramResponse();
 
             // Đồng bộ sessionId
             response.setSessionId(session.getAnythingSessionId());
@@ -128,6 +137,9 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             session.setUpdatedAt(LocalDateTime.now());
             chatSessionRepository.save(session);
 
+            // Async billing: fire and forget (không block response)
+            fireBillingAsync(result, userId, session.getAnythingSessionId(), request.getMessage(), rawAnswer);
+
             return ApiResponse.success("Chat successfully", response);
 
         } catch (AppException exception) {
@@ -138,14 +150,24 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         }
     }
 
-    private DiagramChatResponse callAiWithRetry(String userPrompt, int maxRetries) {
+    private AiChatResult callAiWithRetry(String userPrompt, int maxRetries) {
         String currentPrompt = userPrompt;
         Exception lastException = null;
 
         for (int i = 0; i < maxRetries; i++) {
             try {
-                String rawResponse = umlArchitect.chat(currentPrompt);
-                return parseAndValidateAiResponse(rawResponse);
+                long startTime = System.currentTimeMillis();
+                ChatResponse rawResponse = umlArchitect.chat(currentPrompt);
+                long latencyMs = System.currentTimeMillis() - startTime;
+
+                String rawJson = rawResponse.aiMessage().text();
+                DiagramChatResponse parsed = parseAndValidateAiResponse(rawJson);
+                if (parsed == null) {
+                    throw new RuntimeException("AI returned invalid/empty response");
+                }
+
+                return new AiChatResult(parsed, rawResponse, latencyMs);
+
             } catch (Exception e) {
                 log.warn("AI Chat retry {}/{} due to error: {}", i + 1, maxRetries, e.getMessage());
                 lastException = e;
@@ -158,6 +180,43 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         }
         log.error("AI Chat failed after {} retries", maxRetries, lastException);
         return null;
+    }
+
+    private record AiChatResult(DiagramChatResponse diagramResponse, ChatResponse response, long latencyMs) {}
+
+    private void fireBillingAsync(AiChatResult result, String userId, String sessionId,
+                                   String userMessage, String assistantMessage) {
+        TokenUsage usage = result.response().tokenUsage();
+        int inputTokens;
+        int outputTokens;
+        EstimationMethod method;
+
+        if (usage != null) {
+            inputTokens = usage.inputTokenCount();
+            outputTokens = usage.outputTokenCount();
+            method = EstimationMethod.PROVIDER;
+        } else {
+            inputTokens = estimateTokens(userMessage);
+            outputTokens = estimateTokens(assistantMessage);
+            method = EstimationMethod.JTOKKIT;
+        }
+
+        aiBillingEventPublisher.publishBill(
+                sessionId, userId,
+                inputTokens, outputTokens, method,
+                result.latencyMs(), true, null
+        );
+    }
+
+    private int estimateTokens(String text) {
+        if (text == null || text.isBlank()) return 0;
+        try {
+            EncodingRegistry registry = Encodings.newDefaultEncodingRegistry();
+            Encoding enc = registry.getEncodingForModel(ModelType.GPT_4O_MINI);
+            return enc.countTokens(text);
+        } catch (Exception e) {
+            return text.length() / 4;
+        }
     }
 
     private DiagramChatResponse parseAndValidateAiResponse(String rawResponse) throws Exception {
