@@ -9,9 +9,8 @@ import com.knuddels.jtokkit.Encodings;
 import com.knuddels.jtokkit.api.Encoding;
 import com.knuddels.jtokkit.api.EncodingRegistry;
 import com.knuddels.jtokkit.api.ModelType;
-import dev.langchain4j.data.message.AiMessage;
-import dev.langchain4j.model.chat.response.ChatResponse;
 import dev.langchain4j.model.output.TokenUsage;
+import dev.langchain4j.service.Result;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -157,10 +156,10 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         for (int i = 0; i < maxRetries; i++) {
             try {
                 long startTime = System.currentTimeMillis();
-                ChatResponse rawResponse = umlArchitect.chat(currentPrompt);
+                Result<String> rawResponse = umlArchitect.chat(currentPrompt);
                 long latencyMs = System.currentTimeMillis() - startTime;
 
-                String rawJson = rawResponse.aiMessage().text();
+                String rawJson = rawResponse.content();
                 DiagramChatResponse parsed = parseAndValidateAiResponse(rawJson);
                 if (parsed == null) {
                     throw new RuntimeException("AI returned invalid/empty response");
@@ -182,7 +181,7 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         return null;
     }
 
-    private record AiChatResult(DiagramChatResponse diagramResponse, ChatResponse response, long latencyMs) {}
+    private record AiChatResult(DiagramChatResponse diagramResponse, Result<String> response, long latencyMs) {}
 
     private void fireBillingAsync(AiChatResult result, String userId, String sessionId,
                                    String userMessage, String assistantMessage) {

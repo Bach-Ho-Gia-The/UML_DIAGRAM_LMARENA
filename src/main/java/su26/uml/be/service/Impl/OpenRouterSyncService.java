@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import lombok.experimental.NonFinal;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -34,6 +35,7 @@ public class OpenRouterSyncService {
     SseService sseService;
     ObjectMapper objectMapper;
 
+    @NonFinal
     @Value("${openrouter.api-key:}")
     String openRouterApiKey;
 
