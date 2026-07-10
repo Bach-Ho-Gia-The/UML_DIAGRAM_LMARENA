@@ -5,6 +5,7 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 import su26.uml.be.enums.PaymentStatus;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -27,8 +28,8 @@ public class PaymentTransaction extends BaseEntity {
     @JoinColumn(name = "plan_id", nullable = false)
     Plan plan;
 
-    @Column(nullable = false)
-    Double amount;
+    @Column(nullable = false, precision = 18, scale = 2)
+    BigDecimal amount;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)

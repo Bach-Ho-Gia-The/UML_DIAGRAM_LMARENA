@@ -37,6 +37,7 @@ import su26.uml.be.exception.ErrorCode;
 import su26.uml.be.repository.AiChatMessageRepository;
 import su26.uml.be.repository.AiChatSessionRepository;
 import su26.uml.be.repository.UserRepository;
+import su26.uml.be.service.CoreActivityTracker;
 import su26.uml.be.service.DiagramChatService;
 import su26.uml.be.service.ai.UmlArchitect;
 
@@ -60,6 +61,7 @@ public class DiagramChatServiceImpl implements DiagramChatService {
     private final ObjectMapper objectMapper;
     private final UmlArchitect umlArchitect;
     private final AiBillingEventPublisher aiBillingEventPublisher;
+    private final CoreActivityTracker activityTracker;
 
     @Override
     public ApiResponse<DiagramChatResponse> chat(String email, DiagramChatRequest request) {
@@ -138,6 +140,8 @@ public class DiagramChatServiceImpl implements DiagramChatService {
 
             // Async billing: fire and forget (không block response)
             fireBillingAsync(result, userId, session.getAnythingSessionId(), request.getMessage(), rawAnswer);
+
+            activityTracker.trackActivity(email);
 
             return ApiResponse.success("Chat successfully", response);
 

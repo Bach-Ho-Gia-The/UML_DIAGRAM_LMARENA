@@ -17,5 +17,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);
     List<User> findAllByStatusAndDeletionDateLessThanEqual(UserStatus status, LocalDateTime now);
-    long countByCreatedAtBetweenAndStatus(LocalDateTime from, LocalDateTime to, UserStatus status);
+    long countByCreatedAtBetweenAndStatusAndRoleRoleName(LocalDateTime from, LocalDateTime to, UserStatus status, String roleName);
+    long countByStatusAndRoleRoleName(UserStatus status, String roleName);
+    long countByLastActiveAtAfterAndStatusAndRoleRoleName(LocalDateTime after, UserStatus status, String roleName);
 }

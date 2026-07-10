@@ -7,10 +7,13 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 import su26.uml.be.dto.request.SheetRequest;
 import su26.uml.be.dto.response.ApiResponse;
 import su26.uml.be.dto.response.SheetResponse;
+import su26.uml.be.service.CoreActivityTracker;
 import su26.uml.be.service.SheetService;
 
 import java.util.List;
@@ -24,11 +27,15 @@ import java.util.UUID;
 public class SheetController {
 
     SheetService sheetService;
+    CoreActivityTracker activityTracker;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @Operation(summary = "Create a new sheet", description = "Creates a new drawing sheet for a project.")
-    public ApiResponse<SheetResponse> createSheet(@Valid @RequestBody SheetRequest request) {
+    public ApiResponse<SheetResponse> createSheet(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody SheetRequest request) {
+        activityTracker.trackActivity(userDetails.getUsername());
         return sheetService.createSheet(request);
     }
 
@@ -50,8 +57,10 @@ public class SheetController {
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @Operation(summary = "Update sheet", description = "Updates sheet name, order, or diagram data.")
     public ApiResponse<SheetResponse> updateSheet(
+            @AuthenticationPrincipal UserDetails userDetails,
             @PathVariable UUID sheetId,
             @Valid @RequestBody SheetRequest request) {
+        activityTracker.trackActivity(userDetails.getUsername());
         return sheetService.updateSheet(sheetId, request);
     }
 

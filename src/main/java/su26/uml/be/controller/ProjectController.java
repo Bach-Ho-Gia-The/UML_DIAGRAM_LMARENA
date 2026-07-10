@@ -18,6 +18,7 @@ import su26.uml.be.dto.request.DeleteProjectRequest;
 import su26.uml.be.dto.request.ProjectRequest;
 import su26.uml.be.dto.response.ApiResponse;
 import su26.uml.be.dto.response.ProjectResponse;
+import su26.uml.be.service.CoreActivityTracker;
 import su26.uml.be.service.ProjectService;
 
 import java.util.List;
@@ -31,6 +32,7 @@ import java.util.UUID;
 public class ProjectController {
 
     ProjectService projectService;
+    CoreActivityTracker activityTracker;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
@@ -42,6 +44,7 @@ public class ProjectController {
     public ApiResponse<ProjectResponse> createProject(
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody ProjectRequest request) {
+        activityTracker.trackActivity(userDetails.getUsername());
         return projectService.createProject(userDetails.getUsername(), request);
     }
 
@@ -89,6 +92,7 @@ public class ProjectController {
             @AuthenticationPrincipal UserDetails userDetails,
             @PathVariable UUID projectId,
             @Valid @RequestBody ProjectRequest request) {
+        activityTracker.trackActivity(userDetails.getUsername());
         return projectService.updateProject(projectId, userDetails.getUsername(), request);
     }
 

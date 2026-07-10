@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(name = "plans")
 @Data
@@ -16,8 +18,8 @@ public class Plan extends BaseEntity {
     @Column(nullable = false)
     String name;
 
-    @Column(nullable = false)
-    Double price;
+    @Column(nullable = false, precision = 10, scale = 2)
+    BigDecimal price;
 
     @Column(columnDefinition = "TEXT")
     String description;

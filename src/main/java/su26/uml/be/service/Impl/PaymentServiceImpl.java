@@ -24,6 +24,8 @@ import vn.payos.model.v2.paymentRequests.CreatePaymentLinkRequest;
 import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
 import vn.payos.model.webhooks.WebhookData;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -89,7 +91,7 @@ public class PaymentServiceImpl implements PaymentService {
                     ? safeDescription.substring(0, 25)
                     : safeDescription;
 
-            long amountInVND = (long) (plan.getPrice() * 25400);
+            long amountInVND = plan.getPrice().multiply(BigDecimal.valueOf(25400)).setScale(0, RoundingMode.HALF_UP).longValue();
 
             log.info("Creating PayOS payment: orderCode={}, amountInVND={}, description='{}'",
                     orderCode, amountInVND, description);

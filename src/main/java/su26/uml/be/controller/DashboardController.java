@@ -9,8 +9,12 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import su26.uml.be.dto.response.ApiResponse;
+import su26.uml.be.dto.response.DashboardOverviewResponse;
 import su26.uml.be.dto.response.DashboardStatResponse;
+import su26.uml.be.dto.response.RevenueTrendEntry;
 import su26.uml.be.service.DashboardService;
+
+import java.util.List;
 
 import java.time.LocalDate;
 
@@ -55,5 +59,24 @@ public class DashboardController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return dashboardService.getDiagramStats(range, from, to);
+    }
+
+    @GetMapping("/overview")
+    @Operation(summary = "Aggregated SaaS overview",
+            description = "Returns user metrics (DAU/MAU/total), revenue metrics (MRR/churn/ARPU/margin), " +
+                    "and AI metrics (requests/cost/latency/error/tokens). " +
+                    "Params range/from/to control the AI metric window (user/revenue are always current).")
+    public ApiResponse<DashboardOverviewResponse> getOverview(
+            @RequestParam(defaultValue = "30d") String range,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return dashboardService.getOverview(range, from, to);
+    }
+
+    @GetMapping("/revenue-trend")
+    @Operation(summary = "MRR trend over time",
+            description = "Returns daily MRR snapshots from DailySaasMetric for the revenue trend chart.")
+    public ApiResponse<List<RevenueTrendEntry>> getRevenueTrend() {
+        return dashboardService.getRevenueTrend();
     }
 }

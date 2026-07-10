@@ -79,5 +79,8 @@ public class DashboardOverviewResponse {
 
         @Schema(description = "Average AI latency (ms) in period.", example = "0.0")
         double avgLatencyMs;
+
+        @Schema(description = "Total tokens consumed in period.", example = "0")
+        long totalTokens;
     }
 }
