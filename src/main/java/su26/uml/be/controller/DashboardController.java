@@ -12,6 +12,8 @@ import su26.uml.be.dto.response.ApiResponse;
 import su26.uml.be.dto.response.DashboardOverviewResponse;
 import su26.uml.be.dto.response.DashboardStatResponse;
 import su26.uml.be.dto.response.RevenueTrendEntry;
+import su26.uml.be.dto.response.TopCostDriverResponse;
+import su26.uml.be.dto.response.TopProjectResponse;
 import su26.uml.be.service.DashboardService;
 
 import java.util.List;
@@ -78,5 +80,23 @@ public class DashboardController {
             description = "Returns daily MRR snapshots from DailySaasMetric for the revenue trend chart.")
     public ApiResponse<List<RevenueTrendEntry>> getRevenueTrend() {
         return dashboardService.getRevenueTrend();
+    }
+
+    @GetMapping("/top-cost-drivers")
+    @Operation(summary = "Top users by AI usage",
+            description = "Returns the top users ranked by AI request count (desc) from ai_generation_logs, " +
+                    "enriched with full name, email and total tokens. Param: limit (default 5, max 50).")
+    public ApiResponse<List<TopCostDriverResponse>> getTopCostDrivers(
+            @RequestParam(defaultValue = "5") int limit) {
+        return dashboardService.getTopCostDrivers(limit);
+    }
+
+    @GetMapping("/top-projects")
+    @Operation(summary = "Top projects by diagram count",
+            description = "Returns the top non-deleted projects ranked by number of diagrams (sheets). " +
+                    "Param: limit (default 5, max 50).")
+    public ApiResponse<List<TopProjectResponse>> getTopProjects(
+            @RequestParam(defaultValue = "5") int limit) {
+        return dashboardService.getTopProjects(limit);
     }
 }

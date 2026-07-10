@@ -1,7 +1,10 @@
 package su26.uml.be.repository;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
+import su26.uml.be.dto.projection.TopCostDriverProjection;
 import su26.uml.be.entity.AiGenerationLog;
 
 import java.time.LocalDateTime;
@@ -16,4 +19,10 @@ public interface AiGenerationLogRepository extends JpaRepository<AiGenerationLog
     long countByCreatedAtBetweenAndSuccess(LocalDateTime from, LocalDateTime to, boolean success);
 
     List<AiGenerationLog> findByCreatedAtBetween(LocalDateTime from, LocalDateTime to);
+
+    @Query("SELECT l.userId AS userId, SUM(l.costUsd) AS totalCost, " +
+            "COUNT(l) AS requestCount, COALESCE(SUM(l.totalTokens), 0) AS totalTokens " +
+            "FROM AiGenerationLog l WHERE l.userId IS NOT NULL " +
+            "GROUP BY l.userId ORDER BY COUNT(l) DESC")
+    List<TopCostDriverProjection> findTopCostDrivers(Pageable pageable);
 }

@@ -44,6 +44,7 @@ public class SecurityConfig {
             "/users/verify-otp",
             "/users/reset-password",
             "/actuator/health",
+            "/plans",
             "/api/uml/payments/webhook",
             "/api/uml/payments/status/**",
 

@@ -9,10 +9,12 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import su26.uml.be.entity.FeatureCatalog;
 import su26.uml.be.entity.Role;
 import su26.uml.be.entity.Plan;
 import su26.uml.be.entity.User;
 import su26.uml.be.enums.UserStatus;
+import su26.uml.be.repository.FeatureCatalogRepository;
 import su26.uml.be.repository.RoleRepository;
 import su26.uml.be.repository.PlanRepository;
 import su26.uml.be.repository.UserRepository;
@@ -30,6 +32,7 @@ public class DataInitializer implements CommandLineRunner {
     UserRepository userRepository;
     RoleRepository roleRepository;
     PlanRepository planRepository;
+    FeatureCatalogRepository featureCatalogRepository;
     PasswordEncoder passwordEncoder;
     JdbcTemplate jdbcTemplate;
 
@@ -47,6 +50,9 @@ public class DataInitializer implements CommandLineRunner {
         // 3. Initialize Plans
         initPlans();
 
+        // 3b. Initialize starter feature catalog (admin can add/edit/delete afterwards).
+        initFeatureCatalog();
+
         // 4. Backfill profile_completed for rows created before the column existed.
         backfillProfileCompleted();
 
@@ -55,26 +61,53 @@ public class DataInitializer implements CommandLineRunner {
 
     private void initPlans() {
         if (planRepository.count() == 0) {
-            log.info("Initializing default plans via SQL...");
-            String sql = "INSERT INTO plans (id, created_at, updated_at, name, price, description, duration_days, max_diagrams) VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?)";
-            
-            jdbcTemplate.update(sql, UUID.fromString("11111111-1111-1111-1111-111111111111"), "Free", 0.0, "For students and hobbyists.", -1, 3);
-            jdbcTemplate.update(sql, UUID.fromString("22222222-2222-2222-2222-222222222222"), "Education", 3.0, "For education purposes.", 30, -1);
-            jdbcTemplate.update(sql, UUID.fromString("33333333-3333-3333-3333-333333333333"), "Pro", 12.0, "For professional engineers, freelancers, and small product teams.", 30, -1);
-            jdbcTemplate.update(sql, UUID.fromString("44444444-4444-4444-4444-444444444444"), "Enterprise", 24.0, "For large teams.", 30, -1);
-            
+            log.info("Initializing default plans via SQL (VND, ACTIVE)...");
+            String sql = "INSERT INTO plans (id, created_at, updated_at, name, price, currency, status, description, duration_days, max_diagrams) "
+                    + "VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, 'VND', 'ACTIVE', ?, ?, ?)";
+
+            jdbcTemplate.update(sql, UUID.fromString("11111111-1111-1111-1111-111111111111"), "Free", 0, "For students and hobbyists.", -1, 3);
+            jdbcTemplate.update(sql, UUID.fromString("22222222-2222-2222-2222-222222222222"), "Education", 75000, "For education purposes.", 30, -1);
+            jdbcTemplate.update(sql, UUID.fromString("33333333-3333-3333-3333-333333333333"), "Pro", 300000, "For professional engineers, freelancers, and small product teams.", 30, -1);
+            jdbcTemplate.update(sql, UUID.fromString("44444444-4444-4444-4444-444444444444"), "Enterprise", 600000, "For large teams.", 30, -1);
+
             log.info("Plans initialized successfully.");
         } else {
-            log.info("Updating existing plans to USD pricing...");
-            String updateSql = "UPDATE plans SET price = CASE " +
-                    "WHEN id = '11111111-1111-1111-1111-111111111111' THEN 0.0 " +
-                    "WHEN id = '22222222-2222-2222-2222-222222222222' THEN 3.0 " +
-                    "WHEN id = '33333333-3333-3333-3333-333333333333' THEN 12.0 " +
-                    "WHEN id = '44444444-4444-4444-4444-444444444444' THEN 24.0 " +
-                    "ELSE price END";
+            // One-time migration: convert the seeded plans to VND pricing + ACTIVE.
+            // Guarded by currency so admin edits (price/status) are never overwritten on later restarts.
+            log.info("Migrating existing seed plans to VND pricing + ACTIVE (one-time)...");
+            String updateSql = "UPDATE plans SET price = CASE "
+                    + "WHEN id = '11111111-1111-1111-1111-111111111111' THEN 0 "
+                    + "WHEN id = '22222222-2222-2222-2222-222222222222' THEN 75000 "
+                    + "WHEN id = '33333333-3333-3333-3333-333333333333' THEN 300000 "
+                    + "WHEN id = '44444444-4444-4444-4444-444444444444' THEN 600000 "
+                    + "ELSE price END, currency = 'VND', status = 'ACTIVE' "
+                    + "WHERE id IN ('11111111-1111-1111-1111-111111111111','22222222-2222-2222-2222-222222222222',"
+                    + "'33333333-3333-3333-3333-333333333333','44444444-4444-4444-4444-444444444444') "
+                    + "AND (currency IS NULL OR currency <> 'VND')";
             jdbcTemplate.update(updateSql);
-            log.info("Existing plans updated successfully.");
+            log.info("Existing seed plans migrated.");
         }
+    }
+
+    private void initFeatureCatalog() {
+        if (featureCatalogRepository.count() > 0) {
+            return;
+        }
+        log.info("Seeding starter feature catalog...");
+        String[] labels = {
+                "Vẽ diagram",
+                "Xuất PDF",
+                "Cộng tác realtime",
+                "Chia sẻ công khai",
+                "Ưu tiên hỗ trợ"
+        };
+        for (int i = 0; i < labels.length; i++) {
+            featureCatalogRepository.save(FeatureCatalog.builder()
+                    .label(labels[i])
+                    .sortOrder(i + 1)
+                    .build());
+        }
+        log.info("Feature catalog seeded ({} features).", labels.length);
     }
 
     /**

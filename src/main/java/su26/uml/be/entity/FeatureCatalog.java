@@ -1,0 +1,28 @@
+package su26.uml.be.entity;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Table;
+import lombok.*;
+import lombok.experimental.FieldDefaults;
+
+/**
+ * Admin-managed master catalog of comparable features (rows of the pricing comparison matrix).
+ * Each plan enables a subset of these via {@code Plan.enabledFeatureIds}.
+ */
+@Entity
+@Table(name = "feature_catalog")
+@Data
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
+@FieldDefaults(level = AccessLevel.PRIVATE)
+public class FeatureCatalog extends BaseEntity {
+
+    @Column(nullable = false, unique = true, length = 255)
+    String label;
+
+    @Column(name = "sort_order", nullable = false)
+    @Builder.Default
+    Integer sortOrder = 0;
+}

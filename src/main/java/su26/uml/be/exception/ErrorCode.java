@@ -128,6 +128,18 @@ public enum ErrorCode {
     PAYMENT_LINK_CREATION_FAILED(2101, "Không thể tạo liên kết thanh toán, vui lòng thử lại", HttpStatus.INTERNAL_SERVER_ERROR),
     TRANSACTION_NOT_FOUND(2102, "Không tìm thấy giao dịch", HttpStatus.NOT_FOUND),
     PAYMENT_ALREADY_PROCESSED(2103, "Giao dịch đã được xử lý trước đó", HttpStatus.BAD_REQUEST),
+
+    // PLAN MANAGEMENT ERRORS
+    PLAN_NAME_REQUIRED(2110, "Tên gói không được để trống", HttpStatus.BAD_REQUEST),
+    PLAN_PRICE_REQUIRED(2111, "Giá gói không được để trống", HttpStatus.BAD_REQUEST),
+    PLAN_PRICE_INVALID(2112, "Giá gói phải lớn hơn hoặc bằng 0", HttpStatus.BAD_REQUEST),
+    PLAN_NAME_EXISTED(2113, "Tên gói đã tồn tại", HttpStatus.BAD_REQUEST),
+    PLAN_HAS_SUBSCRIBERS(2114, "Không thể xoá gói đang có người đăng ký. Hãy chuyển sang trạng thái archived.", HttpStatus.BAD_REQUEST),
+
+    // FEATURE CATALOG ERRORS
+    FEATURE_LABEL_REQUIRED(2120, "Tên tính năng không được để trống", HttpStatus.BAD_REQUEST),
+    FEATURE_NOT_FOUND(2121, "Không tìm thấy tính năng", HttpStatus.NOT_FOUND),
+    FEATURE_LABEL_EXISTED(2122, "Tên tính năng đã tồn tại", HttpStatus.BAD_REQUEST),
     ;
 
     private int code;

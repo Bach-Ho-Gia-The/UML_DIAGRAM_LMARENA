@@ -4,15 +4,21 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import su26.uml.be.dto.projection.TopCostDriverProjection;
+import su26.uml.be.dto.projection.TopProjectProjection;
 import su26.uml.be.dto.response.ApiResponse;
 import su26.uml.be.dto.response.DashboardOverviewResponse;
 import su26.uml.be.dto.response.DashboardStatResponse;
 import su26.uml.be.dto.response.RevenueTrendEntry;
+import su26.uml.be.dto.response.TopCostDriverResponse;
+import su26.uml.be.dto.response.TopProjectResponse;
 import su26.uml.be.enums.SubscriptionStatus;
 import su26.uml.be.enums.UserStatus;
 import su26.uml.be.entity.AiGenerationLog;
+import su26.uml.be.entity.User;
 import su26.uml.be.repository.AiGenerationLogRepository;
 import su26.uml.be.repository.DailySaasMetricRepository;
 import su26.uml.be.repository.ProjectRepository;
@@ -30,6 +36,9 @@ import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.UUID;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
@@ -121,6 +130,61 @@ public class DashboardServiceImpl implements DashboardService {
             }
             default -> now.minusDays(30);
         };
+    }
+
+    @Override
+    public ApiResponse<List<TopCostDriverResponse>> getTopCostDrivers(int limit) {
+        List<TopCostDriverProjection> rows = aiGenerationLogRepository.findTopCostDrivers(PageRequest.of(0, clampLimit(limit)));
+
+        List<UUID> userIds = rows.stream()
+                .map(r -> parseUuid(r.getUserId()))
+                .filter(Objects::nonNull)
+                .toList();
+        Map<UUID, User> userMap = userRepository.findAllById(userIds).stream()
+                .collect(Collectors.toMap(User::getId, u -> u));
+
+        List<TopCostDriverResponse> result = rows.stream()
+                .map(r -> {
+                    UUID uid = parseUuid(r.getUserId());
+                    User u = uid == null ? null : userMap.get(uid);
+                    return TopCostDriverResponse.builder()
+                            .userId(r.getUserId())
+                            .fullName(u != null ? u.getFullName() : "Unknown")
+                            .email(u != null ? u.getEmail() : null)
+                            .requestCount(r.getRequestCount())
+                            .totalTokens(r.getTotalTokens())
+                            .totalCostUsd(r.getTotalCost() != null ? r.getTotalCost() : BigDecimal.ZERO)
+                            .build();
+                })
+                .toList();
+
+        return ApiResponse.success("OK", result);
+    }
+
+    @Override
+    public ApiResponse<List<TopProjectResponse>> getTopProjects(int limit) {
+        List<TopProjectResponse> result = sheetRepository.findTopProjects(PageRequest.of(0, clampLimit(limit))).stream()
+                .map(r -> TopProjectResponse.builder()
+                        .projectId(r.getProjectId().toString())
+                        .projectName(r.getProjectName())
+                        .ownerEmail(r.getOwnerEmail())
+                        .diagramCount(r.getDiagramCount())
+                        .build())
+                .toList();
+
+        return ApiResponse.success("OK", result);
+    }
+
+    private int clampLimit(int limit) {
+        return Math.max(1, Math.min(limit, 50));
+    }
+
+    private UUID parseUuid(String value) {
+        try {
+            return value == null ? null : UUID.fromString(value);
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
     }
 
     @Override
