@@ -37,8 +37,9 @@ import su26.uml.be.exception.ErrorCode;
 import su26.uml.be.repository.AiChatMessageRepository;
 import su26.uml.be.repository.AiChatSessionRepository;
 import su26.uml.be.repository.UserRepository;
-import su26.uml.be.service.CoreActivityTracker;
+import su26.uml.be.service.adminDashboard.ActivityTrackerService;
 import su26.uml.be.service.DiagramChatService;
+import su26.uml.be.service.adminDashboard.AiGenerationLogService;
 import su26.uml.be.service.ai.UmlArchitect;
 
 @Service
@@ -60,8 +61,8 @@ public class DiagramChatServiceImpl implements DiagramChatService {
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
     private final UmlArchitect umlArchitect;
-    private final AiBillingEventPublisher aiBillingEventPublisher;
-    private final CoreActivityTracker activityTracker;
+    private final AiGenerationLogService aiGenerationLogService;
+    private final ActivityTrackerService activityTracker;
 
     @Override
     public ApiResponse<DiagramChatResponse> chat(String email, DiagramChatRequest request) {
@@ -204,7 +205,7 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             method = EstimationMethod.JTOKKIT;
         }
 
-        aiBillingEventPublisher.publishBill(
+        aiGenerationLogService.log(
                 sessionId, userId,
                 inputTokens, outputTokens, method,
                 result.latencyMs(), true, null

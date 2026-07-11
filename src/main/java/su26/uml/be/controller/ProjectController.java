@@ -18,7 +18,7 @@ import su26.uml.be.dto.request.DeleteProjectRequest;
 import su26.uml.be.dto.request.ProjectRequest;
 import su26.uml.be.dto.response.ApiResponse;
 import su26.uml.be.dto.response.ProjectResponse;
-import su26.uml.be.service.CoreActivityTracker;
+import su26.uml.be.service.adminDashboard.ActivityTrackerService;
 import su26.uml.be.service.ProjectService;
 
 import java.util.List;
@@ -32,7 +32,7 @@ import java.util.UUID;
 public class ProjectController {
 
     ProjectService projectService;
-    CoreActivityTracker activityTracker;
+    ActivityTrackerService activityTracker;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")

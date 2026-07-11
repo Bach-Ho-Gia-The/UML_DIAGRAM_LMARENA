@@ -1,31 +1,35 @@
-package su26.uml.be.service;
+package su26.uml.be.service.adminDashboard.Impl;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
+import su26.uml.be.service.adminDashboard.ActivityTrackerService;
 
 import java.time.LocalDate;
 import java.time.ZoneId;
 
 @Component
 @RequiredArgsConstructor
-public class CoreActivityTracker {
+public class ActivityTrackerServiceImpl implements ActivityTrackerService {
 
     private static final String DAU_KEY_PREFIX = "hll:dau:";
 
     private final StringRedisTemplate redisTemplate;
 
+    @Override
     public void trackActivity(String userEmail) {
         String key = DAU_KEY_PREFIX + LocalDate.now(ZoneId.of("UTC"));
         redisTemplate.opsForHyperLogLog().add(key, userEmail);
     }
 
+    @Override
     public long getDailyActiveUsers() {
         String key = DAU_KEY_PREFIX + LocalDate.now(ZoneId.of("UTC"));
         Long count = redisTemplate.opsForHyperLogLog().size(key);
         return count != null ? count : 0;
     }
 
+    @Override
     public long getMonthlyActiveUsers() {
         String mergeKey = "hll:mau:merge";
         LocalDate today = LocalDate.now(ZoneId.of("UTC"));

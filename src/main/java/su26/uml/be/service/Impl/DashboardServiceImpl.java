@@ -25,7 +25,7 @@ import su26.uml.be.repository.ProjectRepository;
 import su26.uml.be.repository.SheetRepository;
 import su26.uml.be.repository.SubscriptionRepository;
 import su26.uml.be.repository.UserRepository;
-import su26.uml.be.service.CoreActivityTracker;
+import su26.uml.be.service.adminDashboard.ActivityTrackerService;
 import su26.uml.be.service.DashboardService;
 
 import java.math.BigDecimal;
@@ -51,7 +51,7 @@ public class DashboardServiceImpl implements DashboardService {
     ProjectRepository projectRepository;
     SheetRepository sheetRepository;
     SubscriptionRepository subscriptionRepository;
-    CoreActivityTracker activityTracker;
+    ActivityTrackerService activityTracker;
     DailySaasMetricRepository metricRepository;
     AiGenerationLogRepository aiGenerationLogRepository;
 

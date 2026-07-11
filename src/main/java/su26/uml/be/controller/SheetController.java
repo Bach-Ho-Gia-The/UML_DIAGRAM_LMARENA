@@ -13,7 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import su26.uml.be.dto.request.SheetRequest;
 import su26.uml.be.dto.response.ApiResponse;
 import su26.uml.be.dto.response.SheetResponse;
-import su26.uml.be.service.CoreActivityTracker;
+import su26.uml.be.service.adminDashboard.ActivityTrackerService;
 import su26.uml.be.service.SheetService;
 
 import java.util.List;
@@ -27,7 +27,7 @@ import java.util.UUID;
 public class SheetController {
 
     SheetService sheetService;
-    CoreActivityTracker activityTracker;
+    ActivityTrackerService activityTracker;
 
     @PostMapping
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
