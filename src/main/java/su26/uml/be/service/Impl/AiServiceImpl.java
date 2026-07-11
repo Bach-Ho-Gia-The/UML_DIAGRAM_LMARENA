@@ -4,6 +4,7 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import su26.uml.be.annotation.Auditable;
@@ -16,12 +17,14 @@ import su26.uml.be.dto.request.AiWorkspaceUpdateRequest;
 import su26.uml.be.dto.response.*;
 import su26.uml.be.exception.AppException;
 import su26.uml.be.exception.ErrorCode;
+import su26.uml.be.security.AesEncryption;
 import su26.uml.be.service.AiService;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -33,7 +36,11 @@ public class AiServiceImpl implements AiService {
 
     AnythingLlmClient anythingLlmClient;
     AnythingLlmProperties properties;
+    StringRedisTemplate redisTemplate;
+    AesEncryption aesEncryption;
     static final Path DOC_CONTENT_DIR = Paths.get("data", "doc-content");
+    static final String AI_APIKEY_PREFIX = "ai:apikey:";
+    static final Duration AI_APIKEY_TTL = Duration.ofDays(365);
 
     @Override
     public ApiResponse<AiSystemConfigResponse> getSystemConfig() {
@@ -78,6 +85,18 @@ public class AiServiceImpl implements AiService {
         try {
             Map<String, Object> envConfig = buildSystemEnvConfig(request);
             anythingLlmClient.updateSystemConfig(envConfig);
+
+            if (request.getApiKey() != null && request.getLlmProvider() != null) {
+                String provider = request.getLlmProvider().toLowerCase();
+                String encrypted = aesEncryption.encrypt(request.getApiKey());
+                redisTemplate.opsForValue().set(
+                    AI_APIKEY_PREFIX + provider,
+                    encrypted,
+                    AI_APIKEY_TTL
+                );
+                log.debug("Stored encrypted API key for provider {} in Redis", provider);
+            }
+
             return getSystemConfig();
         } catch (Exception e) {
             log.error("Failed to update system config", e);
@@ -143,19 +162,18 @@ public class AiServiceImpl implements AiService {
             if (request.getOpenAiPrompt() != null) settings.put("openAiPrompt", request.getOpenAiPrompt());
             if (request.getQueryRefusalResponse() != null) settings.put("queryRefusalResponse", request.getQueryRefusalResponse());
 
-            Map<String, Object> raw = anythingLlmClient.updateWorkspace(settings, resolved);
-            Map<String, Object> workspace;
-            if (raw != null && raw.containsKey("workspace")) {
-                Object ws = raw.get("workspace");
-                if (ws instanceof List) {
-                    workspace = (Map<String, Object>) ((List<?>) ws).get(0);
-                } else if (ws instanceof Map) {
-                    workspace = (Map<String, Object>) ws;
-                } else {
-                    workspace = raw;
-                }
-            } else {
-                workspace = raw;
+            anythingLlmClient.updateWorkspace(settings, resolved);
+
+            Map<String, Object> verify = anythingLlmClient.getWorkspaceBySlug(resolved);
+            Map<String, Object> workspace = extractWorkspace(verify);
+            String actualProvider = str(workspace.get("chatProvider"));
+            String actualModel = str(workspace.get("chatModel"));
+
+            if (request.getChatProvider() != null && !request.getChatProvider().equalsIgnoreCase(actualProvider)) {
+                log.warn("Workspace {} chatProvider mismatch: requested={}, actual={}", resolved, request.getChatProvider(), actualProvider);
+            }
+            if (request.getModel() != null && !request.getModel().equals(actualModel)) {
+                log.warn("Workspace {} chatModel mismatch: requested={}, actual={}", resolved, request.getModel(), actualModel);
             }
             return ApiResponse.success("Cập nhật workspace thành công", mapToWorkspaceResponse(workspace));
         } catch (Exception e) {
@@ -305,11 +323,11 @@ public class AiServiceImpl implements AiService {
     }
 
     @Override
-    public ApiResponse<List<String>> getProviderModels(String provider, String basePath) {
+    public ApiResponse<List<String>> getProviderModels(String provider, String basePath, String apiKey) {
         try {
             String p = provider != null ? provider.toLowerCase() : "";
 
-            if (basePath == null || basePath.isBlank()) {
+            if ("ollama".equals(p) && (basePath == null || basePath.isBlank())) {
                 try {
                     Map<String, Object> config = anythingLlmClient.getSystemConfig();
                     Map<String, Object> settings = (Map<String, Object>) config.get("settings");
@@ -320,37 +338,82 @@ public class AiServiceImpl implements AiService {
                 } catch (Exception e) {
                     log.warn("Could not read OLLAMA_BASE_PATH from system config", e);
                 }
+                if (basePath == null || basePath.isBlank()) {
+                    basePath = "http://localhost:11434";
+                }
+            }
+
+            // apiKey from request body: save to Redis immediately, then use it
+            boolean hasInlineKey = apiKey != null && !apiKey.isBlank() && !"ollama".equals(p);
+            if (hasInlineKey) {
+                String redisKey = AI_APIKEY_PREFIX + p;
+                String encrypted = aesEncryption.encrypt(apiKey);
+                redisTemplate.opsForValue().set(redisKey, encrypted, AI_APIKEY_TTL);
+                log.debug("Saved API key from request for provider {} to Redis", p);
             }
 
             List<String> models;
             if ("ollama".equals(p)) {
                 models = anythingLlmClient.fetchOllamaModels(basePath);
-            } else if (List.of("openai", "azure", "lm studio", "localai").contains(p)) {
-                models = anythingLlmClient.fetchOpenAiCompatibleModels(basePath);
+            } else if ("groq".equals(p)) {
+                if (!hasInlineKey) apiKey = resolveApiKey("groq", "GroqApiKey");
+                if (apiKey == null) throw new AppException(ErrorCode.AI_PROVIDER_API_KEY_MISSING);
+                if (basePath == null || basePath.isBlank()) {
+                    basePath = "https://api.groq.com/openai/v1";
+                }
+                models = anythingLlmClient.fetchOpenAiCompatibleModels(basePath, apiKey);
             } else {
-                models = KNOWN_PROVIDER_MODELS.getOrDefault(p, List.of());
+                throw new AppException(ErrorCode.AI_PROVIDER_MODELS_FAILED);
             }
 
             return ApiResponse.success("OK", models);
+        } catch (AppException e) {
+            throw e;
         } catch (Exception e) {
             log.error("Failed to fetch models for provider {}", provider, e);
             throw new AppException(ErrorCode.AI_PROVIDER_MODELS_FAILED);
         }
     }
 
-    private static final Map<String, List<String>> KNOWN_PROVIDER_MODELS = Map.ofEntries(
-            Map.entry("anthropic", List.of("claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307", "claude-2.1", "claude-2.0")),
-            Map.entry("google", List.of("gemini-pro", "gemini-1.5-pro", "gemini-1.5-flash")),
-            Map.entry("mistral", List.of("mistral-large-latest", "mistral-medium-latest", "mistral-small-latest")),
-            Map.entry("groq", List.of("llama3-70b-8192", "llama3-8b-8192", "mixtral-8x7b-32768", "gemma2-9b-it")),
-            Map.entry("together", List.of("mistralai/Mixtral-8x7B-Instruct-v0.1", "meta-llama/Llama-3-70b-chat-hf")),
-            Map.entry("deepseek", List.of("deepseek-chat", "deepseek-coder")),
-            Map.entry("openrouter", List.of("openrouter/auto", "meta-llama/llama-3-70b-instruct")),
-            Map.entry("perplexity", List.of("llama-3-sonar-large-32k", "llama-3-sonar-small-32k")),
-            Map.entry("cohere", List.of("command-r", "command-r-plus")),
-            Map.entry("fireworks", List.of("accounts/fireworks/models/llama-v3-70b-instruct")),
-            Map.entry("novita", List.of("llama3-70b-instruct"))
-    );
+    private String resolveApiKey(String provider, String envKey) {
+        String redisKey = AI_APIKEY_PREFIX + provider;
+        try {
+            String cached = redisTemplate.opsForValue().get(redisKey);
+            if (cached != null && !cached.isBlank()) {
+                String decrypted = aesEncryption.decrypt(cached);
+                log.debug("Found and decrypted API key for provider {} in Redis", provider);
+                return decrypted;
+            }
+        } catch (Exception e) {
+            log.warn("Could not read/decrypt API key from Redis for provider {}", provider, e);
+        }
+
+        String fromEnv = readEnvFromSystemConfig(envKey);
+        if (fromEnv != null) {
+            if ("true".equalsIgnoreCase(fromEnv) || "false".equalsIgnoreCase(fromEnv)) {
+                log.warn("AnythingLLM returned sentinel value '{}' for {} (key not exposed by API), cannot use for auto-detect", fromEnv, envKey);
+                return null;
+            }
+            String encrypted = aesEncryption.encrypt(fromEnv);
+            redisTemplate.opsForValue().set(redisKey, encrypted, AI_APIKEY_TTL);
+            return fromEnv;
+        }
+        return null;
+    }
+
+    private String readEnvFromSystemConfig(String envKey) {
+        try {
+            Map<String, Object> config = anythingLlmClient.getSystemConfig();
+            Map<String, Object> settings = (Map<String, Object>) config.get("settings");
+            if (settings != null) {
+                String val = str(settings.get(envKey));
+                if (val != null && !val.isBlank() && !"false".equalsIgnoreCase(val)) return val;
+            }
+        } catch (Exception e) {
+            log.warn("Could not read {} from system config", envKey, e);
+        }
+        return null;
+    }
 
     // ─── Private helpers ─────────────────────────────────────────
 
@@ -359,8 +422,6 @@ public class AiServiceImpl implements AiService {
             Map.entry("openai", "OpenAiKey"),
             Map.entry("anthropic", "AnthropicApiKey"),
             Map.entry("azure", "AzureOpenAiKey"),
-            Map.entry("google", "GeminiLLMApiKey"),
-            Map.entry("gemini", "GeminiLLMApiKey"),
             Map.entry("mistral", "MistralApiKey"),
             Map.entry("groq", "GroqApiKey"),
             Map.entry("together", "TogetherAiApiKey"),
@@ -380,8 +441,6 @@ public class AiServiceImpl implements AiService {
             "ollama", "OllamaLLMModelPref",
             "openai", "OpenAiModelPref",
             "anthropic", "AnthropicModelPref",
-            "google", "GeminiLLMModelPref",
-            "gemini", "GeminiLLMModelPref",
             "azure", "AzureOpenAiModelPref"
     );
 
@@ -415,16 +474,33 @@ public class AiServiceImpl implements AiService {
         }
 
         if (request.getBaseUrl() != null) {
-            env.put(LLM_BASE_URL_MAP.getOrDefault(provider, "OpenAiBasePath"), request.getBaseUrl());
+            String url = request.getBaseUrl();
+            if ("ollama".equals(provider)) {
+                url = url.replace("localhost", "host.docker.internal");
+            }
+            env.put(LLM_BASE_URL_MAP.getOrDefault(provider, "OpenAiBasePath"), url);
         }
 
+        String apiKeyEnvKey = LLM_API_KEY_MAP.get(provider);
         if (request.getApiKey() != null) {
-            String key = LLM_API_KEY_MAP.get(provider);
-            if (key != null) env.put(key, request.getApiKey());
+            if (apiKeyEnvKey != null) env.put(apiKeyEnvKey, request.getApiKey());
+        } else if (apiKeyEnvKey != null) {
+            String redisKey = AI_APIKEY_PREFIX + provider;
+            try {
+                String cached = redisTemplate.opsForValue().get(redisKey);
+                if (cached != null && !cached.isBlank()) {
+                    String decrypted = aesEncryption.decrypt(cached);
+                    env.put(apiKeyEnvKey, decrypted);
+                    log.debug("Restored existing API key for {} from Redis", provider);
+                }
+            } catch (Exception e) {
+                log.warn("Could not restore API key from Redis for provider {}", provider, e);
+            }
         }
 
         if (request.getModel() != null) {
             env.put(LLM_MODEL_MAP.getOrDefault(provider, "OpenAiModelPref"), request.getModel());
+            env.put("LLMModel", request.getModel());
         }
 
         if (request.getEmbeddingProvider() != null) {
@@ -486,14 +562,19 @@ public class AiServiceImpl implements AiService {
             if (modelKey != null) model = str(settings.get(modelKey));
         }
 
-        Integer chunkSize = null;
-        try { Object o = settings.get("DocumentChunkSize"); if (o instanceof Number) chunkSize = ((Number) o).intValue(); } catch (Exception ignored) {}
-        Integer chunkOverlap = null;
-        try { Object o = settings.get("DocumentChunkOverlap"); if (o instanceof Number) chunkOverlap = ((Number) o).intValue(); } catch (Exception ignored) {}
+        String baseUrl = null;
+        if (llmProvider != null) {
+            String baseUrlKey = LLM_BASE_URL_MAP.getOrDefault(llmProvider.toLowerCase(), "OpenAiBasePath");
+            baseUrl = str(settings.get(baseUrlKey));
+        }
+
+        Integer chunkSize = parseInt(settings.get("DocumentChunkSize"));
+        Integer chunkOverlap = parseInt(settings.get("DocumentChunkOverlap"));
 
         return AiSystemConfigResponse.builder()
                 .llmProvider(llmProvider)
                 .model(model)
+                .baseUrl(baseUrl)
                 .embeddingProvider(embProvider)
                 .embeddingModel(embeddingModel)
                 .vectorDb(vectorDb)
@@ -608,5 +689,13 @@ public class AiServiceImpl implements AiService {
 
     private String str(Object value) {
         return value != null ? value.toString() : null;
+    }
+
+    private Integer parseInt(Object o) {
+        if (o instanceof Number n) return n.intValue();
+        if (o instanceof String s) {
+            try { return Integer.parseInt(s); } catch (Exception ignored) {}
+        }
+        return null;
     }
 }

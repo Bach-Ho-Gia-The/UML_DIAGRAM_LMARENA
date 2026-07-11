@@ -60,7 +60,7 @@ public class AnythingLlmClient {
 
     public List<String> getSystemPreferences() {
         return List.of(
-            "ollama", "openai", "anthropic", "google", "mistral",
+            "ollama", "openai", "anthropic", "mistral",
             "groq", "together", "deepseek", "openrouter", "perplexity",
             "azure", "cohere", "fireworks", "novita"
         );
@@ -90,21 +90,22 @@ public class AnythingLlmClient {
     // ─── Model Auto-Detect ───────────────────────────────────────
     public List<String> fetchOllamaModels(String baseUrl) {
         try {
-            String url = baseUrl != null && !baseUrl.isBlank()
-                    ? baseUrl.replaceAll("/+$", "") + "/api/tags"
-                    : "http://localhost:11434/api/tags";
+            String base = baseUrl != null && !baseUrl.isBlank()
+                    ? baseUrl.replaceAll("/+$", "")
+                    : "http://localhost:11434";
+            String url = base.replace("host.docker.internal", "localhost") + "/api/tags";
 
             WebClient ollamaClient = WebClient.builder()
                     .baseUrl(url)
                     .build();
 
-            Map<String, Object> raw = ollamaClient.get()
+            Map<String, Object> result = ollamaClient.get()
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
                     .block(Duration.ofSeconds(10));
 
-            List<Map<String, Object>> models = (List<Map<String, Object>>) raw.getOrDefault("models", List.of());
+            List<Map<String, Object>> models = (List<Map<String, Object>>) result.getOrDefault("models", List.of());
             return models.stream()
                     .map(m -> str(m.get("name")))
                     .filter(Objects::nonNull)
@@ -115,17 +116,17 @@ public class AnythingLlmClient {
         }
     }
 
-    public List<String> fetchOpenAiCompatibleModels(String baseUrl) {
-        try {
+    public List<String> fetchOpenAiCompatibleModels(String baseUrl, String apiKey) {
             String url = baseUrl != null && !baseUrl.isBlank()
-                    ? baseUrl.replaceAll("/+$", "") + "/v1/models"
+                    ? baseUrl.replaceAll("/+$", "").replaceAll("/v1$", "") + "/v1/models"
                     : "http://localhost:1234/v1/models";
 
-            WebClient openAiClient = WebClient.builder()
-                    .baseUrl(url)
-                    .build();
+            WebClient.Builder builder = WebClient.builder().baseUrl(url);
+            if (apiKey != null && !apiKey.isBlank()) {
+                builder.defaultHeader("Authorization", "Bearer " + apiKey);
+            }
 
-            Map<String, Object> raw = openAiClient.get()
+            Map<String, Object> raw = builder.build().get()
                     .accept(MediaType.APPLICATION_JSON)
                     .retrieve()
                     .bodyToMono(new org.springframework.core.ParameterizedTypeReference<Map<String, Object>>() {})
@@ -136,10 +137,6 @@ public class AnythingLlmClient {
                     .map(m -> str(m.get("id")))
                     .filter(Objects::nonNull)
                     .collect(Collectors.toList());
-        } catch (Exception e) {
-            log.warn("Failed to fetch OpenAI-compatible models from {}", baseUrl, e);
-            return List.of();
-        }
     }
 
     private String str(Object value) {

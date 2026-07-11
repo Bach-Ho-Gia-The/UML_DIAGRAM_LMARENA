@@ -14,6 +14,7 @@ import su26.uml.be.dto.request.AiCreateWorkspaceRequest;
 import su26.uml.be.dto.request.AiDocumentDeleteRequest;
 import su26.uml.be.dto.request.AiSystemConfigRequest;
 import su26.uml.be.dto.request.AiWorkspaceUpdateRequest;
+import su26.uml.be.dto.request.ProviderModelsRequest;
 import su26.uml.be.dto.response.*;
 import su26.uml.be.service.AiService;
 
@@ -69,12 +70,14 @@ public class AiController {
         return aiService.updateWorkspace(request, slug);
     }
 
-    @GetMapping("/providers/{provider}/models")
-    @Operation(summary = "Get provider models", description = "Fetch available models for a given LLM provider from AnythingLLM. Optional ?basePath= query param.")
+    @PostMapping("/providers/{provider}/models")
+    @Operation(summary = "Get provider models", description = "Fetch available models for a given LLM provider.")
     public ApiResponse<List<String>> getProviderModels(
             @PathVariable String provider,
-            @RequestParam(required = false) String basePath) {
-        return aiService.getProviderModels(provider, basePath);
+            @RequestBody(required = false) ProviderModelsRequest request) {
+        String basePath = request != null ? request.getBasePath() : null;
+        String apiKey = request != null ? request.getApiKey() : null;
+        return aiService.getProviderModels(provider, basePath, apiKey);
     }
 
     @GetMapping("/workspaces")

@@ -23,7 +23,7 @@ public interface AiService {
 
     ApiResponse<AiWorkspaceResponse> updateWorkspace(AiWorkspaceUpdateRequest request, String slug);
 
-    ApiResponse<List<String>> getProviderModels(String provider, String basePath);
+    ApiResponse<List<String>> getProviderModels(String provider, String basePath, String apiKey);
 
     ApiResponse<List<AiWorkspaceListItem>> getWorkspaces();
 

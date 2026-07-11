@@ -11,6 +11,7 @@ import lombok.experimental.FieldDefaults;
 public class AiSystemConfigResponse {
     String llmProvider;
     String model;
+    String baseUrl;
     String embeddingProvider;
     String embeddingModel;
     String vectorDb;

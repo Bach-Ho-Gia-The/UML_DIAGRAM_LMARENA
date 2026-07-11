@@ -79,6 +79,9 @@ public enum ErrorCode {
     AI_RE_EMBED_FAILED(1087, "Re-embed documents thất bại", HttpStatus.INTERNAL_SERVER_ERROR),
     AI_PROVIDER_MODELS_FAILED(1088, "Không thể lấy danh sách model từ provider", HttpStatus.INTERNAL_SERVER_ERROR),
     AI_DOCUMENT_CONTENT_NOT_FOUND(1091, "Không tìm thấy nội dung document", HttpStatus.NOT_FOUND),
+    AI_PROVIDER_API_KEY_MISSING(1093, "Vui lòng cấu hình API key trước khi phát hiện model", HttpStatus.BAD_REQUEST),
+    AI_PROVIDER_AUTH_FAILED(1094, "API key không hợp lệ hoặc hết hạn cho provider này", HttpStatus.UNAUTHORIZED),
+    AI_PROVIDER_UPSTREAM_ERROR(1095, "Lỗi từ provider AI: ", HttpStatus.BAD_GATEWAY),
 
     // AUDIT LOG
     INVALID_DATE_RANGE(1092, "Khoảng thời gian không hợp lệ: 'from' phải trước hoặc bằng 'to'", HttpStatus.BAD_REQUEST),

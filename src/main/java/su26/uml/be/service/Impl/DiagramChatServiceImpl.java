@@ -11,6 +11,7 @@ import com.knuddels.jtokkit.api.EncodingRegistry;
 import com.knuddels.jtokkit.api.ModelType;
 import dev.langchain4j.model.output.TokenUsage;
 import dev.langchain4j.service.Result;
+import dev.ai4j.openai4j.OpenAiHttpException;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -114,6 +115,9 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             AiChatResult result;
             try {
                 result = callAiWithRetry(promptBuilder.toString(), MAX_RETRIES);
+            } catch (AppException e) {
+                logAiError(session.getAnythingSessionId(), userId, request.getMessage(), e.getMessage());
+                throw e;
             } catch (RuntimeException e) {
                 logAiError(session.getAnythingSessionId(), userId, request.getMessage(), e.getMessage());
                 throw new AppException(ErrorCode.ANYTHING_LLM_ERROR);
@@ -173,6 +177,14 @@ public class DiagramChatServiceImpl implements DiagramChatService {
                 }
 
                 return new AiChatResult(parsed, rawResponse, latencyMs);
+
+            } catch (OpenAiHttpException e) {
+                log.error("AI Chat upstream error (attempt {}): status={}, body={}", i + 1, e.code(), e.getMessage());
+                String detail = "[" + e.code() + "] " + e.getMessage();
+                if (e.code() == 401) {
+                    throw new AppException(ErrorCode.AI_PROVIDER_AUTH_FAILED, detail);
+                }
+                throw new AppException(ErrorCode.AI_PROVIDER_UPSTREAM_ERROR, detail);
 
             } catch (Exception e) {
                 log.warn("AI Chat retry {}/{} due to error: {}", i + 1, maxRetries, e.getMessage());
