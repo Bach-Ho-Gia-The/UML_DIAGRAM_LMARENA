@@ -111,10 +111,11 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             promptBuilder.append("Nếu một node có trong danh sách trên nhưng không có trong kết quả JSON của bạn, nó sẽ bị xóa khỏi màn hình.");
 
             // Gọi AI với cơ chế Error Reflection + token extraction
-            AiChatResult result = callAiWithRetry(promptBuilder.toString(), MAX_RETRIES);
-
-            if (result == null) {
-                logAiError(session.getAnythingSessionId(), userId, request.getMessage());
+            AiChatResult result;
+            try {
+                result = callAiWithRetry(promptBuilder.toString(), MAX_RETRIES);
+            } catch (RuntimeException e) {
+                logAiError(session.getAnythingSessionId(), userId, request.getMessage(), e.getMessage());
                 throw new AppException(ErrorCode.ANYTHING_LLM_ERROR);
             }
 
@@ -184,15 +185,15 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             }
         }
         log.error("AI Chat failed after {} retries", maxRetries, lastException);
-        return null;
+        throw new RuntimeException(lastException != null ? lastException.getMessage() : "AI chat failed");
     }
 
     private record AiChatResult(DiagramChatResponse diagramResponse, Result<String> response, long latencyMs) {}
 
-    private void logAiError(String sessionId, String userId, String userMessage) {
+    private void logAiError(String sessionId, String userId, String userMessage, String errorMessage) {
         int inputTokens = estimateTokens(userMessage);
         aiGenerationLogService.log(sessionId, userId, inputTokens, 0,
-                EstimationMethod.JTOKKIT, 0, false, "All retries failed");
+                EstimationMethod.JTOKKIT, 0, false, errorMessage);
     }
 
     private void logAiGeneration(AiChatResult result, String userId, String sessionId,

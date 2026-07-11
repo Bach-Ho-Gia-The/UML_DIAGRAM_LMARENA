@@ -14,6 +14,7 @@ import su26.uml.be.dto.response.DashboardOverviewResponse;
 import su26.uml.be.dto.response.DashboardStatResponse;
 import su26.uml.be.dto.response.RevenueTrendEntry;
 import su26.uml.be.dto.response.TopCostDriverResponse;
+import su26.uml.be.dto.response.AiErrorLogEntry;
 import su26.uml.be.dto.response.AiModelStatsResponse;
 import su26.uml.be.dto.response.TopProjectResponse;
 import su26.uml.be.enums.SubscriptionStatus;
@@ -230,6 +231,25 @@ public class DashboardServiceImpl implements DashboardService {
                 .map(m -> RevenueTrendEntry.builder().date(m.getSnapshotDate()).mrr(m.getMrr()).build())
                 .collect(Collectors.toList());
         return ApiResponse.success("OK", entries);
+    }
+
+    @Override
+    public ApiResponse<List<AiErrorLogEntry>> getAiErrorLogs(String provider, String modelName, int limit) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime from = now.minusDays(30);
+        List<AiGenerationLog> logs = aiGenerationLogRepository
+                .findByCreatedAtBetweenAndSuccessAndProviderAndModelNameOrderByCreatedAtDesc(
+                        from, now, false, provider, modelName);
+
+        List<AiErrorLogEntry> result = logs.stream()
+                .limit(clampLimit(limit))
+                .map(l -> AiErrorLogEntry.builder()
+                        .createdAt(l.getCreatedAt())
+                        .errorMessage(l.getErrorMessage())
+                        .build())
+                .toList();
+
+        return ApiResponse.success("OK", result);
     }
 
     private ApiResponse<DashboardStatResponse> buildStat(

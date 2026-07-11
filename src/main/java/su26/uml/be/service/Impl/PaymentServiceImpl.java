@@ -91,7 +91,7 @@ public class PaymentServiceImpl implements PaymentService {
                     ? safeDescription.substring(0, 25)
                     : safeDescription;
 
-            long amountInVND = plan.getPrice().multiply(BigDecimal.valueOf(25400)).setScale(0, RoundingMode.HALF_UP).longValue();
+            long amountInVND = plan.getPrice().setScale(0, RoundingMode.HALF_UP).longValue();
 
             log.info("Creating PayOS payment: orderCode={}, amountInVND={}, description='{}'",
                     orderCode, amountInVND, description);

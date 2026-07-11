@@ -60,18 +60,17 @@ public class SaasMetricSyncServiceImpl implements SaasMetricSyncService {
         long aiErrors = aiGenerationLogRepository.countByCreatedAtBetweenAndSuccess(last30d, now, false);
         double aiErrorRate = aiRequests == 0 ? 0 : Math.round((double) aiErrors / aiRequests * 100 * 10.0) / 10.0;
 
-        DailySaasMetric metric = DailySaasMetric.builder()
-                .snapshotDate(today)
-                .totalUsers(totalUsers)
-                .mau(mau)
-                .mrr(mrr)
-                .churnRate(churnRate)
-                .arpu(arpu)
-                .aiRequests(aiRequests)
-                .aiCostUsd(BigDecimal.ZERO)
-                .aiErrorRate(aiErrorRate)
-                .aiAvgLatencyMs(0)
-                .build();
+        DailySaasMetric metric = metricRepository.findBySnapshotDate(today)
+                .orElse(DailySaasMetric.builder().snapshotDate(today).build());
+        metric.setTotalUsers(totalUsers);
+        metric.setMau(mau);
+        metric.setMrr(mrr);
+        metric.setChurnRate(churnRate);
+        metric.setArpu(arpu);
+        metric.setAiRequests(aiRequests);
+        metric.setAiCostUsd(BigDecimal.ZERO);
+        metric.setAiErrorRate(aiErrorRate);
+        metric.setAiAvgLatencyMs(0);
 
         metricRepository.save(metric);
         refreshHllTtl(today);

@@ -13,6 +13,7 @@ import su26.uml.be.dto.response.DashboardOverviewResponse;
 import su26.uml.be.dto.response.DashboardStatResponse;
 import su26.uml.be.dto.response.RevenueTrendEntry;
 import su26.uml.be.dto.response.TopCostDriverResponse;
+import su26.uml.be.dto.response.AiErrorLogEntry;
 import su26.uml.be.dto.response.AiModelStatsResponse;
 import su26.uml.be.dto.response.TopProjectResponse;
 import su26.uml.be.service.DashboardService;
@@ -101,6 +102,17 @@ public class DashboardController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
         return dashboardService.getAiModelStats(range, from, to);
+    }
+
+    @GetMapping("/ai-error-logs")
+    @Operation(summary = "AI error logs by provider/model",
+            description = "Returns recent error logs (success=false) for a given provider and model, " +
+                    "ordered by createdAt desc. Params: provider, modelName (required), limit (default 20, max 50).")
+    public ApiResponse<List<AiErrorLogEntry>> getAiErrorLogs(
+            @RequestParam String provider,
+            @RequestParam String modelName,
+            @RequestParam(defaultValue = "20") int limit) {
+        return dashboardService.getAiErrorLogs(provider, modelName, limit);
     }
 
     @GetMapping("/top-projects")

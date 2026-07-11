@@ -5,6 +5,7 @@ import su26.uml.be.dto.response.DashboardOverviewResponse;
 import su26.uml.be.dto.response.DashboardStatResponse;
 import su26.uml.be.dto.response.RevenueTrendEntry;
 import su26.uml.be.dto.response.TopCostDriverResponse;
+import su26.uml.be.dto.response.AiErrorLogEntry;
 import su26.uml.be.dto.response.AiModelStatsResponse;
 import su26.uml.be.dto.response.TopProjectResponse;
 
@@ -21,4 +22,6 @@ public interface DashboardService {
     ApiResponse<List<TopProjectResponse>> getTopProjects(int limit);
 
     ApiResponse<List<AiModelStatsResponse>> getAiModelStats(String range, LocalDate from, LocalDate to);
+
+    ApiResponse<List<AiErrorLogEntry>> getAiErrorLogs(String provider, String modelName, int limit);
 }
