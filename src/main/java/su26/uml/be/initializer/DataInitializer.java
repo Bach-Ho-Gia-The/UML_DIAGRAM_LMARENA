@@ -40,6 +40,12 @@ public class DataInitializer implements CommandLineRunner {
     public void run(String... args) {
         log.info("Initializing sample data...");
 
+        // 0. Ensure the ShedLock coordination table exists. It is NOT a JPA entity, so
+        //    ddl-auto=update never creates it, and the JdbcTemplate lock provider does not
+        //    self-create schema — without this the scheduled jobs fail with
+        //    "relation \"shedlock\" does not exist".
+        initShedLockTable();
+
         // 1. Initialize Roles
         Role adminRole = initRole("ADMIN", "System Administrator Role");
         Role userRole = initRole("USER", "Standard Application User Role");
@@ -57,6 +63,15 @@ public class DataInitializer implements CommandLineRunner {
         backfillProfileCompleted();
 
         log.info("Data initialization completed.");
+    }
+
+    private void initShedLockTable() {
+        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS shedlock (" +
+                "name VARCHAR(64) NOT NULL PRIMARY KEY, " +
+                "lock_until TIMESTAMP NOT NULL, " +
+                "locked_at TIMESTAMP NOT NULL, " +
+                "locked_by VARCHAR(255) NOT NULL)");
+        log.info("ShedLock table ensured.");
     }
 
     private void initPlans() {

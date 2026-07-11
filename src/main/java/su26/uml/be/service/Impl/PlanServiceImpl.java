@@ -23,8 +23,10 @@ import su26.uml.be.repository.PlanRepository;
 import su26.uml.be.repository.SubscriptionRepository;
 import su26.uml.be.service.PlanService;
 
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -172,29 +174,43 @@ public class PlanServiceImpl implements PlanService {
     }
 
     /**
-     * Rebuilds the plan_features rows from the request's limits object.
-     * No grandfathering: existing subscribers immediately see the new limits.
+     * Reconciles the plan_features rows with the request's limits object via an in-place upsert:
+     * existing keys are updated, dropped keys are orphan-removed, new keys are inserted. We must
+     * NOT clear() then re-add the same (plan_id, feature_key) — Hibernate flushes the INSERT before
+     * the orphan DELETE, which violates the unique constraint. No grandfathering: existing
+     * subscribers immediately see the new limits.
      */
     private void applyLimits(Plan plan, PlanRequest request) {
         PlanRequest.PlanLimitsRequest limits = request.getLimits();
-        plan.getPlanFeatures().clear();
-        if (limits == null) {
-            return;
+        Map<PlanFeatureKey, Integer> desired = new EnumMap<>(PlanFeatureKey.class);
+        if (limits != null) {
+            putLimit(desired, PlanFeatureKey.MAX_PROJECTS, limits.getProjects());
+            putLimit(desired, PlanFeatureKey.MAX_DIAGRAMS, limits.getDiagrams());
+            putLimit(desired, PlanFeatureKey.AI_QUERIES, limits.getAiQueries());
+            putLimit(desired, PlanFeatureKey.MAX_COLLABORATORS, limits.getCollaborators());
         }
-        addFeature(plan, PlanFeatureKey.MAX_PROJECTS, limits.getProjects());
-        addFeature(plan, PlanFeatureKey.MAX_DIAGRAMS, limits.getDiagrams());
-        addFeature(plan, PlanFeatureKey.AI_QUERIES, limits.getAiQueries());
-        addFeature(plan, PlanFeatureKey.MAX_COLLABORATORS, limits.getCollaborators());
-    }
 
-    private void addFeature(Plan plan, PlanFeatureKey key, Integer value) {
-        if (value == null) {
-            return;
-        }
-        plan.getPlanFeatures().add(PlanFeature.builder()
+        // Update rows still wanted (in place) / remove rows no longer wanted.
+        plan.getPlanFeatures().removeIf(pf -> {
+            Integer value = desired.remove(pf.getFeatureKey());
+            if (value == null) {
+                return true; // key no longer set -> orphan-remove
+            }
+            pf.setLimitValue(value); // key still set -> update in place (no re-insert)
+            return false;
+        });
+
+        // Insert only genuinely new keys.
+        desired.forEach((key, value) -> plan.getPlanFeatures().add(PlanFeature.builder()
                 .plan(plan)
                 .featureKey(key)
                 .limitValue(value)
-                .build());
+                .build()));
+    }
+
+    private void putLimit(Map<PlanFeatureKey, Integer> map, PlanFeatureKey key, Integer value) {
+        if (value != null) {
+            map.put(key, value);
+        }
     }
 }
