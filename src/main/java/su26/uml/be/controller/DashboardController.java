@@ -13,6 +13,7 @@ import su26.uml.be.dto.response.DashboardOverviewResponse;
 import su26.uml.be.dto.response.DashboardStatResponse;
 import su26.uml.be.dto.response.RevenueTrendEntry;
 import su26.uml.be.dto.response.TopCostDriverResponse;
+import su26.uml.be.dto.response.AiModelStatsResponse;
 import su26.uml.be.dto.response.TopProjectResponse;
 import su26.uml.be.service.DashboardService;
 
@@ -89,6 +90,17 @@ public class DashboardController {
     public ApiResponse<List<TopCostDriverResponse>> getTopCostDrivers(
             @RequestParam(defaultValue = "5") int limit) {
         return dashboardService.getTopCostDrivers(limit);
+    }
+
+    @GetMapping("/ai-model-stats")
+    @Operation(summary = "AI error & usage stats by provider/model",
+            description = "Returns per-provider-model stats: requests, errors, error rate (%), total cost. " +
+                    "Params: range=24h|7d|30d|custom (default 30d).")
+    public ApiResponse<List<AiModelStatsResponse>> getAiModelStats(
+            @RequestParam(defaultValue = "30d") String range,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
+        return dashboardService.getAiModelStats(range, from, to);
     }
 
     @GetMapping("/top-projects")

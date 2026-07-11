@@ -5,6 +5,7 @@ import su26.uml.be.dto.response.DashboardOverviewResponse;
 import su26.uml.be.dto.response.DashboardStatResponse;
 import su26.uml.be.dto.response.RevenueTrendEntry;
 import su26.uml.be.dto.response.TopCostDriverResponse;
+import su26.uml.be.dto.response.AiModelStatsResponse;
 import su26.uml.be.dto.response.TopProjectResponse;
 
 import java.time.LocalDate;
@@ -18,4 +19,6 @@ public interface DashboardService {
     ApiResponse<List<RevenueTrendEntry>> getRevenueTrend();
     ApiResponse<List<TopCostDriverResponse>> getTopCostDrivers(int limit);
     ApiResponse<List<TopProjectResponse>> getTopProjects(int limit);
+
+    ApiResponse<List<AiModelStatsResponse>> getAiModelStats(String range, LocalDate from, LocalDate to);
 }

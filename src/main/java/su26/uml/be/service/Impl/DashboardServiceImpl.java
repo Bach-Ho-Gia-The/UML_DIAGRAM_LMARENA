@@ -14,6 +14,7 @@ import su26.uml.be.dto.response.DashboardOverviewResponse;
 import su26.uml.be.dto.response.DashboardStatResponse;
 import su26.uml.be.dto.response.RevenueTrendEntry;
 import su26.uml.be.dto.response.TopCostDriverResponse;
+import su26.uml.be.dto.response.AiModelStatsResponse;
 import su26.uml.be.dto.response.TopProjectResponse;
 import su26.uml.be.enums.SubscriptionStatus;
 import su26.uml.be.enums.UserStatus;
@@ -36,6 +37,7 @@ import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.AbstractMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -185,6 +187,41 @@ public class DashboardServiceImpl implements DashboardService {
         } catch (IllegalArgumentException e) {
             return null;
         }
+    }
+
+    @Override
+    public ApiResponse<List<AiModelStatsResponse>> getAiModelStats(String range, LocalDate from, LocalDate to) {
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime aiFrom = resolveAiRange(range, from, to, now);
+        List<AiGenerationLog> logs = aiGenerationLogRepository.findByCreatedAtBetween(aiFrom, now);
+
+        Map<Map.Entry<String, String>, List<AiGenerationLog>> grouped = logs.stream()
+                .collect(Collectors.groupingBy(
+                        l -> new AbstractMap.SimpleEntry<>(l.getProvider(), l.getModelName())));
+
+        List<AiModelStatsResponse> result = new ArrayList<>();
+        for (var entry : grouped.entrySet()) {
+            List<AiGenerationLog> group = entry.getValue();
+            String provider = entry.getKey().getKey();
+            String model = entry.getKey().getValue();
+            long total = group.size();
+            long errors = group.stream().filter(l -> !l.isSuccess()).count();
+            double rate = total == 0 ? 0 : Math.round(errors * 100.0 / total * 10.0) / 10.0;
+            BigDecimal cost = group.stream()
+                    .map(AiGenerationLog::getCostUsd)
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+            result.add(AiModelStatsResponse.builder()
+                    .provider(provider)
+                    .modelName(model)
+                    .totalRequests(total)
+                    .errorCount(errors)
+                    .errorRate(rate)
+                    .totalCostUsd(cost)
+                    .build());
+        }
+
+        return ApiResponse.success("OK", result);
     }
 
     @Override

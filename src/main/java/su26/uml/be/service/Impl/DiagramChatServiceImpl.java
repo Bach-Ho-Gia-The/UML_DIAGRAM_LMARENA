@@ -114,6 +114,7 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             AiChatResult result = callAiWithRetry(promptBuilder.toString(), MAX_RETRIES);
 
             if (result == null) {
+                logAiError(session.getAnythingSessionId(), userId, request.getMessage());
                 throw new AppException(ErrorCode.ANYTHING_LLM_ERROR);
             }
 
@@ -139,8 +140,8 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             session.setUpdatedAt(LocalDateTime.now());
             chatSessionRepository.save(session);
 
-            // Async billing: fire and forget (không block response)
-            fireBillingAsync(result, userId, session.getAnythingSessionId(), request.getMessage(), rawAnswer);
+            // Async: log AI generation (không block response)
+            logAiGeneration(result, userId, session.getAnythingSessionId(), request.getMessage(), rawAnswer);
 
             activityTracker.trackActivity(email);
 
@@ -188,7 +189,13 @@ public class DiagramChatServiceImpl implements DiagramChatService {
 
     private record AiChatResult(DiagramChatResponse diagramResponse, Result<String> response, long latencyMs) {}
 
-    private void fireBillingAsync(AiChatResult result, String userId, String sessionId,
+    private void logAiError(String sessionId, String userId, String userMessage) {
+        int inputTokens = estimateTokens(userMessage);
+        aiGenerationLogService.log(sessionId, userId, inputTokens, 0,
+                EstimationMethod.JTOKKIT, 0, false, "All retries failed");
+    }
+
+    private void logAiGeneration(AiChatResult result, String userId, String sessionId,
                                    String userMessage, String assistantMessage) {
         TokenUsage usage = result.response().tokenUsage();
         int inputTokens;
