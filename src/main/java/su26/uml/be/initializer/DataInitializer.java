@@ -13,6 +13,7 @@ import su26.uml.be.entity.FeatureCatalog;
 import su26.uml.be.entity.Role;
 import su26.uml.be.entity.Plan;
 import su26.uml.be.entity.User;
+import su26.uml.be.enums.PlanFeatureKey;
 import su26.uml.be.enums.UserStatus;
 import su26.uml.be.repository.FeatureCatalogRepository;
 import su26.uml.be.repository.RoleRepository;
@@ -59,10 +60,52 @@ public class DataInitializer implements CommandLineRunner {
         // 3b. Initialize starter feature catalog (admin can add/edit/delete afterwards).
         initFeatureCatalog();
 
+        // 3c. Seed quota limits (plan_features) + rate limits for the seed plans (idempotent —
+        //     ON CONFLICT DO NOTHING for limits, only-if-null for rate limits → admin edits preserved).
+        seedPlanQuotasAndRateLimits();
+
         // 4. Backfill profile_completed for rows created before the column existed.
         backfillProfileCompleted();
 
         log.info("Data initialization completed.");
+    }
+
+    private void seedPlanQuotasAndRateLimits() {
+        // Rate limit (per 10s / per phút) — chỉ set khi cột còn null (bảo toàn chỉnh sửa của admin).
+        setRate("11111111-1111-1111-1111-111111111111", 3, 10);      // Free
+        setRate("22222222-2222-2222-2222-222222222222", 8, 40);      // Education
+        setRate("33333333-3333-3333-3333-333333333333", 15, 100);    // Pro
+        setRate("44444444-4444-4444-4444-444444444444", null, null); // Enterprise (tuỳ chỉnh)
+
+        // Quota limits (plan_features), -1 = unlimited. Thứ tự: AI, Projects, Diagrams, Export PDF, Collaborators.
+        seedLimits("11111111-1111-1111-1111-111111111111", 50, 3, 20, 10, 1);
+        seedLimits("22222222-2222-2222-2222-222222222222", 500, 20, 200, 100, 5);
+        seedLimits("33333333-3333-3333-3333-333333333333", 2000, -1, -1, -1, 20);
+        seedLimits("44444444-4444-4444-4444-444444444444", -1, -1, -1, -1, -1);
+
+        log.info("Plan quotas & rate limits seeded (idempotent).");
+    }
+
+    private void setRate(String planId, Integer per10s, Integer perMin) {
+        jdbcTemplate.update(
+                "UPDATE plans SET rate_limit_per_10s = ?, rate_limit_per_min = ? "
+                        + "WHERE id = ? AND rate_limit_per_10s IS NULL AND rate_limit_per_min IS NULL",
+                per10s, perMin, UUID.fromString(planId));
+    }
+
+    private void seedLimits(String planId, int ai, int projects, int diagrams, int exportPdf, int collaborators) {
+        seedFeature(planId, PlanFeatureKey.AI_QUERIES, ai);
+        seedFeature(planId, PlanFeatureKey.MAX_PROJECTS, projects);
+        seedFeature(planId, PlanFeatureKey.MAX_DIAGRAMS, diagrams);
+        seedFeature(planId, PlanFeatureKey.EXPORT_PDF, exportPdf);
+        seedFeature(planId, PlanFeatureKey.MAX_COLLABORATORS, collaborators);
+    }
+
+    private void seedFeature(String planId, PlanFeatureKey key, int value) {
+        jdbcTemplate.update(
+                "INSERT INTO plan_features (id, created_at, updated_at, plan_id, feature_key, limit_value) "
+                        + "VALUES (?, now(), now(), ?, ?, ?) ON CONFLICT (plan_id, feature_key) DO NOTHING",
+                UUID.randomUUID(), UUID.fromString(planId), key.name(), value);
     }
 
     private void initShedLockTable() {

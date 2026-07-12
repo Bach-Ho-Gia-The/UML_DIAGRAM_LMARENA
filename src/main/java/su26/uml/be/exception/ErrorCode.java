@@ -143,6 +143,11 @@ public enum ErrorCode {
     FEATURE_LABEL_REQUIRED(2120, "Tên tính năng không được để trống", HttpStatus.BAD_REQUEST),
     FEATURE_NOT_FOUND(2121, "Không tìm thấy tính năng", HttpStatus.NOT_FOUND),
     FEATURE_LABEL_EXISTED(2122, "Tên tính năng đã tồn tại", HttpStatus.BAD_REQUEST),
+
+    // QUOTA / RATE LIMIT ERRORS
+    QUOTA_EXCEEDED(2130, "Bạn đã dùng hết lượt AI trong kỳ. Hãy nâng gói hoặc đợi kỳ sau.", HttpStatus.PAYMENT_REQUIRED),
+    RATE_LIMIT_EXCEEDED(2131, "Thao tác quá nhanh, vui lòng thử lại sau ít giây.", HttpStatus.TOO_MANY_REQUESTS),
+    PLAN_LIMIT_EXCEEDED(2132, "Bạn đã đạt giới hạn của gói. Hãy nâng gói để dùng thêm.", HttpStatus.FORBIDDEN),
     ;
 
     private int code;

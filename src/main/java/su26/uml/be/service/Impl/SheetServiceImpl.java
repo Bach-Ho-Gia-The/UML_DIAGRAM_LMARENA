@@ -13,9 +13,11 @@ import su26.uml.be.entity.Project;
 import su26.uml.be.entity.Sheet;
 import su26.uml.be.exception.AppException;
 import su26.uml.be.exception.ErrorCode;
+import su26.uml.be.enums.PlanFeatureKey;
 import su26.uml.be.mapper.SheetMapper;
 import su26.uml.be.repository.ProjectRepository;
 import su26.uml.be.repository.SheetRepository;
+import su26.uml.be.service.PlanLimitService;
 import su26.uml.be.service.SheetService;
 
 import java.util.List;
@@ -31,11 +33,15 @@ public class SheetServiceImpl implements SheetService {
     SheetRepository sheetRepository;
     ProjectRepository projectRepository;
     SheetMapper sheetMapper;
+    PlanLimitService planLimitService;
 
     @Override
     public ApiResponse<SheetResponse> createSheet(SheetRequest request) {
         Project project = projectRepository.findById(request.getProjectId())
                 .orElseThrow(() -> new AppException(ErrorCode.PROJECT_NOT_FOUND));
+
+        planLimitService.assertCanCreate(project.getUser().getId(), PlanFeatureKey.MAX_DIAGRAMS,
+                sheetRepository.countByProject_UserAndProject_IsDeletedFalse(project.getUser()));
 
         Sheet sheet = sheetMapper.toSheet(request);
         sheet.setProject(project);

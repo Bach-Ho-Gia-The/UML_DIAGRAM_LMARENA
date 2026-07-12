@@ -60,6 +60,12 @@ public class PlanRequest {
     @Schema(description = "Billing period length in days.", example = "30")
     Integer durationDays;
 
+    @Schema(description = "Rate limit — requests per 10 seconds (technical, hidden from public /plans).", example = "15")
+    Integer rateLimitPer10s;
+
+    @Schema(description = "Rate limit — requests per minute (technical, hidden from public /plans).", example = "100")
+    Integer rateLimitPerMin;
+
     @Schema(description = "Numeric usage limits. Use -1 for unlimited.")
     PlanLimitsRequest limits;
 
@@ -78,6 +84,7 @@ public class PlanRequest {
         Integer projects;
         Integer diagrams;
         Integer aiQueries;
+        Integer exportPdf;
         Integer collaborators;
     }
 }

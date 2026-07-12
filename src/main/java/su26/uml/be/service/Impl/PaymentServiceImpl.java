@@ -19,6 +19,7 @@ import su26.uml.be.repository.PlanRepository;
 import su26.uml.be.repository.SubscriptionRepository;
 import su26.uml.be.repository.UserRepository;
 import su26.uml.be.service.PaymentService;
+import su26.uml.be.service.QuotaService;
 import vn.payos.PayOS;
 import vn.payos.model.v2.paymentRequests.CreatePaymentLinkRequest;
 import vn.payos.model.v2.paymentRequests.CreatePaymentLinkResponse;
@@ -41,6 +42,7 @@ public class PaymentServiceImpl implements PaymentService {
     private final PaymentTransactionRepository paymentTransactionRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
+    private final QuotaService quotaService;
 
     @Value("${app.frontend.base-url:http://localhost:5173}")
     private String frontendUrl;
@@ -175,6 +177,9 @@ public class PaymentServiceImpl implements PaymentService {
 
             user.setCurrentSubscription(subscription);
             userRepository.save(user);
+
+            // Reset quota theo gói mới: used=0, limit=gói mới, reset_at=now+30d (thanh quota hiện gói mới).
+            quotaService.resetOnPlanChange(user.getId());
 
             log.info("Successfully granted plan {} to user {}", plan.getName(), user.getUsername());
 

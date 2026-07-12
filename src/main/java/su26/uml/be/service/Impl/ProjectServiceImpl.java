@@ -42,6 +42,7 @@ public class ProjectServiceImpl implements ProjectService {
     SheetRepository sheetRepository;
     ProjectMapper projectMapper;
     su26.uml.be.service.SocketService socketService;
+    su26.uml.be.service.PlanLimitService planLimitService;
     ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -52,6 +53,9 @@ public class ProjectServiceImpl implements ProjectService {
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        planLimitService.assertCanCreate(user.getId(), su26.uml.be.enums.PlanFeatureKey.MAX_PROJECTS,
+                projectRepository.countByUserAndIsDeletedFalse(user));
 
         Project project = projectMapper.toProject(request);
         project.setUser(user);

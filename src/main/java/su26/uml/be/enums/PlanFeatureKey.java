@@ -8,5 +8,6 @@ public enum PlanFeatureKey {
     MAX_PROJECTS,
     MAX_DIAGRAMS,
     AI_QUERIES,
+    EXPORT_PDF,
     MAX_COLLABORATORS
 }

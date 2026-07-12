@@ -46,7 +46,13 @@ public class PlanServiceImpl implements PlanService {
     public ApiResponse<List<PlanResponse>> getPublicPlans() {
         List<FeatureCatalog> catalog = loadCatalog();
         List<PlanResponse> result = planRepository.findByStatusOrderByPriceAsc(PlanStatus.ACTIVE).stream()
-                .map(plan -> buildResponse(plan, catalog))
+                .map(plan -> {
+                    PlanResponse r = buildResponse(plan, catalog);
+                    // Rate limit là thông số kỹ thuật — không lộ ra public.
+                    r.setRateLimitPer10s(null);
+                    r.setRateLimitPerMin(null);
+                    return r;
+                })
                 .toList();
         return ApiResponse.success("OK", result);
     }
@@ -187,6 +193,7 @@ public class PlanServiceImpl implements PlanService {
             putLimit(desired, PlanFeatureKey.MAX_PROJECTS, limits.getProjects());
             putLimit(desired, PlanFeatureKey.MAX_DIAGRAMS, limits.getDiagrams());
             putLimit(desired, PlanFeatureKey.AI_QUERIES, limits.getAiQueries());
+            putLimit(desired, PlanFeatureKey.EXPORT_PDF, limits.getExportPdf());
             putLimit(desired, PlanFeatureKey.MAX_COLLABORATORS, limits.getCollaborators());
         }
 

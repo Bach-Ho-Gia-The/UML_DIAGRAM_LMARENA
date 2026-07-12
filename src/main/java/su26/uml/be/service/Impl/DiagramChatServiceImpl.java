@@ -40,8 +40,11 @@ import su26.uml.be.repository.AiChatSessionRepository;
 import su26.uml.be.repository.UserRepository;
 import su26.uml.be.service.adminDashboard.ActivityTrackerService;
 import su26.uml.be.service.DiagramChatService;
+import su26.uml.be.service.QuotaService;
+import su26.uml.be.service.RateLimiterService;
 import su26.uml.be.service.adminDashboard.AiGenerationLogService;
 import su26.uml.be.service.ai.UmlArchitect;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @Service
 @RequiredArgsConstructor
@@ -64,13 +67,29 @@ public class DiagramChatServiceImpl implements DiagramChatService {
     private final UmlArchitect umlArchitect;
     private final AiGenerationLogService aiGenerationLogService;
     private final ActivityTrackerService activityTracker;
+    private final QuotaService quotaService;
+    private final RateLimiterService rateLimiterService;
 
     @Override
     public ApiResponse<DiagramChatResponse> chat(String email, DiagramChatRequest request) {
         User user = getCurrentUser(email);
-        String userId = user.getId().toString();
+        UUID uid = user.getId();
+        String userId = uid.toString();
 
         validateChatRequest(request);
+
+        boolean isAdmin = isCurrentUserAdmin();
+
+        // Rate limit — áp cho CẢ admin (429 nếu vượt ngưỡng 10s/60s).
+        rateLimiterService.checkOrThrow(uid, isAdmin);
+
+        // Quota — admin BYPASS (không trừ) nhưng request vẫn được ghi log & tính vào tổng lượt.
+        // 1 message = trừ đúng 1 quota (dù AI Runtime gọi LLM nhiều lần). 402 nếu hết.
+        boolean reserved = false;
+        if (!isAdmin) {
+            quotaService.reserveAiRequest(uid);
+            reserved = true;
+        }
 
         try {
             AiChatSessionDocument session = resolveSession(userId, request.getSessionId());
@@ -153,11 +172,21 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             return ApiResponse.success("Chat successfully", response);
 
         } catch (AppException exception) {
+            // Cách A: AI/hệ thống lỗi → hoàn lại 1 lượt (user không mất oan).
+            if (reserved) quotaService.rollbackAiRequest(uid);
             throw exception;
         } catch (Exception exception) {
+            if (reserved) quotaService.rollbackAiRequest(uid);
             log.error("AI Chat processing error", exception);
             throw new AppException(ErrorCode.CHAT_SESSION_PROCESSING_ERROR);
         }
+    }
+
+    /** Admin lấy từ authorities (ROLE_ADMIN) — tránh lazy-load User.role. */
+    private boolean isCurrentUserAdmin() {
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
 
     private AiChatResult callAiWithRetry(String userPrompt, int maxRetries) {

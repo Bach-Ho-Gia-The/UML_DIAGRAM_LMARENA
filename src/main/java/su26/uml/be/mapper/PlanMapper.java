@@ -36,6 +36,7 @@ public interface PlanMapper {
                     case MAX_PROJECTS -> builder.projects(f.getLimitValue());
                     case MAX_DIAGRAMS -> builder.diagrams(f.getLimitValue());
                     case AI_QUERIES -> builder.aiQueries(f.getLimitValue());
+                    case EXPORT_PDF -> builder.exportPdf(f.getLimitValue());
                     case MAX_COLLABORATORS -> builder.collaborators(f.getLimitValue());
                 }
             }

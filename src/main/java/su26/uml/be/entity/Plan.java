@@ -65,6 +65,13 @@ public class Plan extends BaseEntity {
     @Column(name = "duration_days")
     Integer durationDays;
 
+    /** Rate limit (thông số kỹ thuật, admin cấu hình, ẨN khỏi /plans public). null = tuỳ chỉnh/không giới hạn. */
+    @Column(name = "rate_limit_per_10s")
+    Integer rateLimitPer10s;
+
+    @Column(name = "rate_limit_per_min")
+    Integer rateLimitPerMin;
+
     @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     @ToString.Exclude

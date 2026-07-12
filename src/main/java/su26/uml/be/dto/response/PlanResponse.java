@@ -49,6 +49,12 @@ public class PlanResponse {
     @Schema(example = "30")
     Integer durationDays;
 
+    @Schema(description = "Rate limit / 10s (admin only; null trong /plans public).", example = "15")
+    Integer rateLimitPer10s;
+
+    @Schema(description = "Rate limit / phút (admin only; null trong /plans public).", example = "100")
+    Integer rateLimitPerMin;
+
     @Schema(description = "Number of active subscriptions on this plan.", example = "42")
     long subscribers;
 
@@ -69,6 +75,7 @@ public class PlanResponse {
         Integer projects;
         Integer diagrams;
         Integer aiQueries;
+        Integer exportPdf;
         Integer collaborators;
     }
 
