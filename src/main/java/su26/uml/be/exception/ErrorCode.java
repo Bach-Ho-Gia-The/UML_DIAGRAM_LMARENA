@@ -146,7 +146,7 @@ public enum ErrorCode {
 
     // QUOTA / RATE LIMIT ERRORS
     QUOTA_EXCEEDED(2130, "Bạn đã dùng hết lượt AI trong kỳ. Hãy nâng gói hoặc đợi kỳ sau.", HttpStatus.PAYMENT_REQUIRED),
-    RATE_LIMIT_EXCEEDED(2131, "Thao tác quá nhanh, vui lòng thử lại sau ít giây.", HttpStatus.TOO_MANY_REQUESTS),
+    RATE_LIMIT_EXCEEDED(2131, "Bạn đang yêu cầu quá nhiều lần, vui lòng chờ.", HttpStatus.TOO_MANY_REQUESTS),
     PLAN_LIMIT_EXCEEDED(2132, "Bạn đã đạt giới hạn của gói. Hãy nâng gói để dùng thêm.", HttpStatus.FORBIDDEN),
     ;
 

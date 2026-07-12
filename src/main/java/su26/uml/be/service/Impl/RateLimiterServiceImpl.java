@@ -60,6 +60,7 @@ public class RateLimiterServiceImpl implements RateLimiterService {
             redis.expire(key, Duration.ofSeconds(ttlSeconds));
         }
         if (count > limit) {
+            log.warn("429 TOO_MANY_REQUESTS — key={} count={}/{} trong cửa sổ {}s", key, count, limit, ttlSeconds);
             throw new AppException(ErrorCode.RATE_LIMIT_EXCEEDED);
         }
     }
