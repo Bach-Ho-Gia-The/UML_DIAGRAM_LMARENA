@@ -11,16 +11,23 @@ import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.stereotype.Service;
 import su26.uml.be.security.CustomOAuth2User;
 import su26.uml.be.dto.request.OAuth2UserInfo;
+import su26.uml.be.entity.Plan;
 import su26.uml.be.entity.Role;
+import su26.uml.be.entity.Subscription;
 import su26.uml.be.entity.User;
+import su26.uml.be.enums.PlanStatus;
+import su26.uml.be.enums.SubscriptionStatus;
 import su26.uml.be.exception.AppException;
 import su26.uml.be.exception.ErrorCode;
 import su26.uml.be.mapper.OAuth2UserMapper;
+import su26.uml.be.repository.PlanRepository;
 import su26.uml.be.repository.RoleRepository;
+import su26.uml.be.repository.SubscriptionRepository;
 import su26.uml.be.repository.UserRepository;
 import su26.uml.be.enums.UserStatus;
 import su26.uml.be.service.CustomOAuth2UserService;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.Map;
 
@@ -32,6 +39,8 @@ public class CustomOAuth2UserServiceImpl extends DefaultOAuth2UserService implem
 
     UserRepository userRepository;
     RoleRepository roleRepository;
+    PlanRepository planRepository;
+    SubscriptionRepository subscriptionRepository;
     OAuth2UserMapper oauth2UserMapper;
 
     @Override
@@ -114,7 +123,29 @@ public class CustomOAuth2UserServiceImpl extends DefaultOAuth2UserService implem
         newUser.setProfileCompleted(false); // Google user lần đầu: phải qua onboarding
 
         User saved = userRepository.save(newUser);
+        assignLowestPlan(saved);
         log.info("Tạo user mới từ Google OAuth2: {}", email);
         return saved;
+    }
+
+    private void assignLowestPlan(User user) {
+        planRepository.findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE)
+                .ifPresentOrElse(plan -> {
+                    LocalDateTime now = LocalDateTime.now();
+                    LocalDateTime endDate = plan.getDurationDays() != null && plan.getDurationDays() > 0
+                            ? now.plusDays(plan.getDurationDays())
+                            : null;
+
+                    Subscription subscription = Subscription.builder()
+                            .user(user)
+                            .plan(plan)
+                            .status(SubscriptionStatus.ACTIVE)
+                            .startDate(now)
+                            .endDate(endDate)
+                            .build();
+
+                    subscriptionRepository.save(subscription);
+                    user.setCurrentSubscription(subscription);
+                }, () -> log.warn("Không tìm thấy gói ACTIVE nào — user {} không được gán subscription", user.getEmail()));
     }
 }

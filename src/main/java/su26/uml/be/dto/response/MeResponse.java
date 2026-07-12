@@ -32,4 +32,8 @@ public class MeResponse {
     @Schema(description = "Whether the user has finished onboarding (set a real password). " +
             "Google users start as false and must complete the onboarding wizard.", example = "true")
     Boolean profileCompleted;
+
+    @Schema(description = "ID of the plan the user is currently subscribed to (null = free/no subscription).",
+            example = "11111111-1111-1111-1111-111111111111")
+    UUID currentPlanId;
 }

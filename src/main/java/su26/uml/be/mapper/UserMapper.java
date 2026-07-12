@@ -27,6 +27,7 @@ public interface UserMapper {
     List<UserResponse> toUserResponseList(List<User> users);
 
     @Mapping(target = "role", source = "role.roleName")
+    @Mapping(target = "currentPlanId", source = "currentSubscription.plan.id")
     // profileCompleted maps directly from the User.profileCompleted column (source of truth).
     MeResponse toMeResponse(User user);
 

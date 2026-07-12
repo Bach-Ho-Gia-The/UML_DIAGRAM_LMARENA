@@ -13,6 +13,8 @@ import su26.uml.be.annotation.Auditable;
 import su26.uml.be.audit.AuditContext;
 import su26.uml.be.dto.request.*;
 import su26.uml.be.enums.UserStatus;
+import su26.uml.be.enums.SubscriptionStatus;
+import su26.uml.be.enums.PlanStatus;
 import su26.uml.be.dto.response.ApiResponse;
 import su26.uml.be.dto.response.DeleteAccountResponse;
 import su26.uml.be.dto.response.MeResponse;
@@ -20,7 +22,9 @@ import su26.uml.be.dto.response.PagedResponse;
 import su26.uml.be.dto.response.UserResponse;
 
 import java.time.LocalDateTime;
+import su26.uml.be.entity.Plan;
 import su26.uml.be.entity.Role;
+import su26.uml.be.entity.Subscription;
 import su26.uml.be.entity.User;
 import su26.uml.be.exception.AppException;
 import su26.uml.be.exception.ErrorCode;
@@ -28,6 +32,8 @@ import su26.uml.be.mapper.UserMapper;
 import su26.uml.be.repository.ProjectRepository;
 import su26.uml.be.repository.RoleRepository;
 import su26.uml.be.repository.SheetRepository;
+import su26.uml.be.repository.PlanRepository;
+import su26.uml.be.repository.SubscriptionRepository;
 import su26.uml.be.repository.UserRepository;
 import su26.uml.be.service.EmailService;
 import su26.uml.be.service.OtpService;
@@ -47,6 +53,8 @@ import java.util.List;
 public class UserServiceImpl implements UserService {
     UserRepository userRepository;
     RoleRepository roleRepository;
+    PlanRepository planRepository;
+    SubscriptionRepository subscriptionRepository;
     ProjectRepository projectRepository;
     SheetRepository sheetRepository;
 
@@ -76,6 +84,7 @@ public class UserServiceImpl implements UserService {
         user.setStatus(UserStatus.ACTIVE);
         user.setProfileCompleted(true); // tài khoản đăng ký thường đã có đủ thông tin
         User savedUser = userRepository.save(user);
+        assignLowestPlan(savedUser);
 
         UserResponse userResponse = userMapper.toUserResponse(savedUser);
 //        resolveAvatar(userResponse);
@@ -379,6 +388,7 @@ public class UserServiceImpl implements UserService {
         user.setStatus(UserStatus.ACTIVE);
         user.setProfileCompleted(true);
         User savedUser = userRepository.save(user);
+        assignLowestPlan(savedUser);
 
         // Audit: id/email của admin vừa tạo (target chỉ có sau khi save).
         AuditContext.setTargetId(savedUser.getId());
@@ -425,5 +435,26 @@ public class UserServiceImpl implements UserService {
     private String generateOtp() {
         int otp = 100000 + SECURE_RANDOM.nextInt(900000);
         return String.valueOf(otp);
+    }
+
+    private void assignLowestPlan(User user) {
+        planRepository.findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE)
+                .ifPresentOrElse(plan -> {
+                    LocalDateTime now = LocalDateTime.now();
+                    LocalDateTime endDate = plan.getDurationDays() != null && plan.getDurationDays() > 0
+                            ? now.plusDays(plan.getDurationDays())
+                            : null;
+
+                    Subscription subscription = Subscription.builder()
+                            .user(user)
+                            .plan(plan)
+                            .status(SubscriptionStatus.ACTIVE)
+                            .startDate(now)
+                            .endDate(endDate)
+                            .build();
+
+                    subscriptionRepository.save(subscription);
+                    user.setCurrentSubscription(subscription);
+                }, () -> log.warn("Không tìm thấy gói ACTIVE nào — user {} không được gán subscription", user.getEmail()));
     }
 }

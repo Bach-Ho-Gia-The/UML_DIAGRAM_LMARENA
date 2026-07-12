@@ -31,6 +31,6 @@ public class Subscription extends BaseEntity {
     @Column(name = "start_date", nullable = false)
     LocalDateTime startDate;
 
-    @Column(name = "end_date", nullable = false)
+    @Column(name = "end_date")
     LocalDateTime endDate;
 }
