@@ -35,9 +35,12 @@ import su26.uml.be.repository.SheetRepository;
 import su26.uml.be.repository.PlanRepository;
 import su26.uml.be.repository.SubscriptionRepository;
 import su26.uml.be.repository.UserRepository;
+import org.springframework.web.multipart.MultipartFile;
+import su26.uml.be.dto.response.FileUploadResponse;
 import su26.uml.be.service.EmailService;
 import su26.uml.be.service.OtpService;
 import su26.uml.be.service.RefreshTokenService;
+import su26.uml.be.service.StorageService;
 import su26.uml.be.service.UserService;
 
 
@@ -61,6 +64,7 @@ public class UserServiceImpl implements UserService {
     EmailService emailService;
     OtpService otpService;
     RefreshTokenService refreshTokenService;
+    StorageService storageService;
 
     UserMapper userMapper;
 
@@ -430,6 +434,156 @@ public class UserServiceImpl implements UserService {
         AuditContext.putBeforeAfter(before, user.getStatus());
 
         return ApiResponse.success(message, null);
+    }
+
+    @Override
+    @Auditable(action = "USER_UPDATE", targetType = "USER", targetId = "#userId")
+    public ApiResponse<UserResponse> adminUpdateUser(UUID userId, AdminUpdateUserRequest request, String currentUserEmail) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        User currentUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        boolean isSelf = user.getId().equals(currentUser.getId());
+
+        // Họ tên: luôn cho phép cập nhật.
+        if (request.getFullName() != null && !request.getFullName().isBlank()) {
+            user.setFullName(request.getFullName().trim());
+        }
+
+        // Thông tin cá nhân: cho phép cập nhật (bỏ qua nếu không gửi).
+        if (request.getPhone() != null && !request.getPhone().isBlank()) {
+            user.setPhone(request.getPhone().trim());
+        }
+        if (request.getDob() != null) {
+            user.setDob(request.getDob());
+        }
+        if (request.getAvatarUrl() != null && !request.getAvatarUrl().isBlank()) {
+            user.setAvatarUrl(request.getAvatarUrl().trim());
+        }
+
+        // Vai trò: admin không được tự đổi vai trò của chính mình (tránh tự hạ quyền).
+        if (request.getRoleName() != null && !request.getRoleName().isBlank()) {
+            if (isSelf) throw new AppException(ErrorCode.CANNOT_MODIFY_SELF);
+            Role role = roleRepository.findByRoleName(request.getRoleName().toUpperCase())
+                    .orElseThrow(() -> new AppException(ErrorCode.ROLE_NOT_FOUND));
+            user.setRole(role);
+        }
+
+        // Trạng thái: admin không được tự khóa chính mình. Chỉ nhận ACTIVE/LOCKED tại đây
+        // (PENDING_DELETE đi qua endpoint soft-delete riêng).
+        if (request.getStatus() != null && !request.getStatus().isBlank()) {
+            if (isSelf) throw new AppException(ErrorCode.CANNOT_MODIFY_SELF);
+            UserStatus target;
+            try {
+                target = UserStatus.valueOf(request.getStatus().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new AppException(ErrorCode.INVALID_STATUS);
+            }
+            if (target != UserStatus.ACTIVE && target != UserStatus.LOCKED) {
+                throw new AppException(ErrorCode.INVALID_STATUS);
+            }
+            user.setStatus(target);
+            if (target == UserStatus.ACTIVE) user.setDeletionDate(null);
+        }
+
+        User savedUser = userRepository.save(user);
+        return ApiResponse.success("Cập nhật người dùng thành công", userMapper.toUserResponse(savedUser));
+    }
+
+    @Override
+    @Auditable(action = "USER_SOFT_DELETE", targetType = "USER", targetId = "#userId")
+    public ApiResponse<UserResponse> adminSoftDeleteUser(UUID userId, String currentUserEmail) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        User currentUser = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        // Không cho tự xóa chính mình, và không cho xóa Quản trị viên khác.
+        if (user.getId().equals(currentUser.getId()))
+            throw new AppException(ErrorCode.DELETE_SELF_INVALID);
+        if ("ADMIN".equalsIgnoreCase(user.getRole().getRoleName()))
+            throw new AppException(ErrorCode.DELETE_OTHER_ADMIN_INVALID);
+        if (user.getStatus() == UserStatus.PENDING_DELETE)
+            throw new AppException(ErrorCode.ACCOUNT_ALREADY_PENDING_DELETE);
+
+        user.setStatus(UserStatus.PENDING_DELETE);
+        user.setDeletionDate(LocalDateTime.now().plusDays(30));
+        User savedUser = userRepository.save(user);
+
+        return ApiResponse.success("Đã chuyển tài khoản sang trạng thái chờ xoá (30 ngày)",
+                userMapper.toUserResponse(savedUser));
+    }
+
+    @Override
+    @Auditable(action = "USER_RESTORE", targetType = "USER", targetId = "#userId")
+    public ApiResponse<UserResponse> adminRestoreUser(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        if (user.getStatus() != UserStatus.PENDING_DELETE)
+            throw new AppException(ErrorCode.ACCOUNT_NOT_PENDING_DELETE);
+
+        user.setStatus(UserStatus.ACTIVE);
+        user.setDeletionDate(null);
+        User savedUser = userRepository.save(user);
+
+        return ApiResponse.success("Khôi phục tài khoản thành công", userMapper.toUserResponse(savedUser));
+    }
+
+    @Override
+    @Auditable(action = "USER_PASSWORD_RESET", targetType = "USER", targetId = "#userId")
+    public ApiResponse<Void> adminSetPassword(UUID userId, AdminSetPasswordRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        // Không tin FE: xác thực lại độ mạnh (đã có @Pattern ở DTO nhưng vẫn guard).
+        if (passwordStrength(request.getNewPassword()) < 2) {
+            throw new AppException(ErrorCode.INVALID_PASSWORD);
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        user.setLastPasswordChangeAt(LocalDateTime.now());
+        userRepository.save(user);
+
+        // Admin đặt lại mật khẩu → thu hồi mọi phiên cũ, buộc user đăng nhập lại.
+        refreshTokenService.revokeAllTokens(user.getId().toString());
+        refreshTokenService.setLogoutTime(user.getEmail());
+
+        return ApiResponse.success("Đặt lại mật khẩu cho người dùng thành công", null);
+    }
+
+    @Override
+    @Auditable(action = "USER_AVATAR_UPDATE", targetType = "USER", targetId = "#userId")
+    public ApiResponse<UserResponse> adminUpdateAvatar(UUID userId, MultipartFile file) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+
+        String oldAvatarUrl = user.getAvatarUrl();
+
+        // Upload ảnh mới vào đúng thư mục của user đích rồi lưu URL vào DB.
+        FileUploadResponse uploaded = storageService.uploadAvatarForUser(file, userId.toString());
+        user.setAvatarUrl(uploaded.getUrl());
+        userRepository.save(user);
+
+        // Dọn file cũ trong bucket avatars (best-effort — không chặn luồng nếu lỗi).
+        deleteAvatarQuietly(oldAvatarUrl, uploaded.getUrl());
+
+        return ApiResponse.success("Cập nhật ảnh đại diện thành công", userMapper.toUserResponse(user));
+    }
+
+    /** Xoá file avatar cũ trong bucket 'avatars' nếu URL trỏ về Supabase Storage của ta. */
+    private void deleteAvatarQuietly(String oldUrl, String newUrl) {
+        if (oldUrl == null || oldUrl.isBlank() || oldUrl.equals(newUrl)) return;
+        String marker = "/object/public/avatars/";
+        int idx = oldUrl.indexOf(marker);
+        if (idx < 0) return; // không phải file trong Storage của ta (vd. Google avatar) → bỏ qua
+        String path = oldUrl.substring(idx + marker.length());
+        try {
+            storageService.deleteFile("avatars", path);
+        } catch (Exception e) {
+            log.warn("Không xoá được avatar cũ '{}': {}", path, e.getMessage());
+        }
     }
 
     private String generateOtp() {

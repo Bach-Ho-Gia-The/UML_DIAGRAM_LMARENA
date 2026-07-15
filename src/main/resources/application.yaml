@@ -11,8 +11,8 @@ spring:
     import: optional:file:BE/.env[.properties]
 
   datasource:
-#    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require&prepareThreshold=0
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=disable
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require&prepareThreshold=0
+#    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=disable
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
@@ -52,18 +52,6 @@ spring:
       max-file-size: 11MB
       max-request-size: 12MB
 
-  mail:
-    host: smtp.gmail.com
-    port: 587
-    username: ${MAIL_USERNAME}
-    password: ${MAIL_PASSWORD}
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
-
   security:
     oauth2:
       client:
@@ -101,6 +89,12 @@ otp:
   max-attempts: ${OTP_MAX_ATTEMPTS:5}
   # Thời gian giữ cờ "đã verify OTP" để cho phép đặt lại mật khẩu (giây).
   verified-ttl-seconds: ${OTP_VERIFIED_TTL_SECONDS:300}
+
+brevo:
+  api-key: ${BREVO_API_KEY}
+  sender:
+    email: ${BREVO_SENDER_EMAIL}
+    name: ${BREVO_SENDER_NAME:AIMA}
 
 app:
   frontend:

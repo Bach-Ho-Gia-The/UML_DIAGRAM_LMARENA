@@ -1,14 +1,11 @@
 package su26.uml.be.service.Impl;
 
-import jakarta.mail.MessagingException;
-import jakarta.mail.internet.MimeMessage;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.stereotype.Service;
+import su26.uml.be.config.email.EmailSender;
 import su26.uml.be.service.EmailService;
 
 import java.time.LocalDateTime;
@@ -19,10 +16,7 @@ import java.time.format.DateTimeFormatter;
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class EmailServiceImpl implements EmailService {
 
-    final JavaMailSender mailSender;
-
-    @Value("${spring.mail.username}")
-    String fromEmail;
+    final EmailSender brevoEmailSender;
 
     // Trang chủ FE — dùng cho liên kết "quên mật khẩu" trong email xác nhận thiết lập.
     @Value("${app.frontend.base-url}")
@@ -144,18 +138,6 @@ public class EmailServiceImpl implements EmailService {
     }
 
     private void sendHtmlEmail(String toEmail, String subject, String htmlContent) {
-        try {
-            MimeMessage message = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
-
-            helper.setFrom(fromEmail);
-            helper.setTo(toEmail);
-            helper.setSubject(subject);
-            helper.setText(htmlContent, true);
-
-            mailSender.send(message);
-        } catch (MessagingException e) {
-            throw new RuntimeException("Lỗi khi gửi email: " + e.getMessage());
-        }
+        brevoEmailSender.sendHtml(toEmail, subject, htmlContent);
     }
 }

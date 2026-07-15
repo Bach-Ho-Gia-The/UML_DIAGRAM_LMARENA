@@ -62,6 +62,18 @@ public class StorageServiceImpl implements StorageService {
     }
 
     @Override
+    public FileUploadResponse uploadAvatarForUser(MultipartFile file, String userId) {
+        validate(file, ALLOWED_IMAGE_TYPES, MAX_AVATAR_SIZE);
+        String path = buildObjectPath(userId, file.getOriginalFilename());
+        upload(BUCKET_AVATARS, path, file);
+        return FileUploadResponse.builder()
+                .bucket(BUCKET_AVATARS)
+                .path(path)
+                .url(buildPublicUrl(BUCKET_AVATARS, path))
+                .build();
+    }
+
+    @Override
     public FileUploadResponse uploadDocument(MultipartFile file, String email) {
         validate(file, Set.of(PDF_TYPE), MAX_DOCUMENT_SIZE);
         String userId = resolveUserId(email);

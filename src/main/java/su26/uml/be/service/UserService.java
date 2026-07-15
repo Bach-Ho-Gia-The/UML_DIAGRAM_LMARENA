@@ -1,6 +1,7 @@
 package su26.uml.be.service;
 
 import org.springframework.data.domain.Pageable;
+import org.springframework.web.multipart.MultipartFile;
 import su26.uml.be.dto.request.*;
 import su26.uml.be.dto.response.ApiResponse;
 import su26.uml.be.dto.response.DeleteAccountResponse;
@@ -29,4 +30,11 @@ public interface UserService {
 
     ApiResponse<UserResponse> registerAdmin(UserRegisterRequest request);
     ApiResponse<Void> toggleUserStatus(UUID userId, String currentUserEmail);
+
+    // Admin user management (full CRUD)
+    ApiResponse<UserResponse> adminUpdateUser(UUID userId, AdminUpdateUserRequest request, String currentUserEmail);
+    ApiResponse<UserResponse> adminSoftDeleteUser(UUID userId, String currentUserEmail);
+    ApiResponse<UserResponse> adminRestoreUser(UUID userId);
+    ApiResponse<Void> adminSetPassword(UUID userId, AdminSetPasswordRequest request);
+    ApiResponse<UserResponse> adminUpdateAvatar(UUID userId, MultipartFile file);
 }

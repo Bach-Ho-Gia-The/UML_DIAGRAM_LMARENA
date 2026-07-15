@@ -13,7 +13,9 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 import su26.uml.be.dto.request.*;
 import su26.uml.be.dto.response.ApiResponse;
 import su26.uml.be.dto.response.DeleteAccountResponse;
@@ -173,5 +175,58 @@ public class AccountController {
             @PathVariable UUID userId,
             @AuthenticationPrincipal UserDetails userDetails) {
         return userService.toggleUserStatus(userId, userDetails.getUsername());
+    }
+
+    @PatchMapping("/admin/{userId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Update a user (admin)",
+            description = "Partially updates fullName, role (USER/ADMIN) and status (ACTIVE/LOCKED). " +
+                    "An admin cannot change their own role or status.")
+    public ApiResponse<UserResponse> adminUpdateUser(
+            @PathVariable UUID userId,
+            @Valid @RequestBody AdminUpdateUserRequest request,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return userService.adminUpdateUser(userId, request, userDetails.getUsername());
+    }
+
+    @PostMapping("/admin/{userId}/soft-delete")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Soft-delete a user (admin)",
+            description = "Marks the target user PENDING_DELETE with a 30-day grace period. " +
+                    "An admin cannot delete themselves or another ADMIN.")
+    public ApiResponse<UserResponse> adminSoftDeleteUser(
+            @PathVariable UUID userId,
+            @AuthenticationPrincipal UserDetails userDetails) {
+        return userService.adminSoftDeleteUser(userId, userDetails.getUsername());
+    }
+
+    @PostMapping("/admin/{userId}/restore")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Restore a soft-deleted user (admin)",
+            description = "Cancels a PENDING_DELETE and sets the account back to ACTIVE.")
+    public ApiResponse<UserResponse> adminRestoreUser(@PathVariable UUID userId) {
+        return userService.adminRestoreUser(userId);
+    }
+
+    @PostMapping("/admin/{userId}/password")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Reset a user's password (admin)",
+            description = "Sets a new BCrypt password for the target user (no OTP). " +
+                    "All of the target user's sessions are revoked, forcing re-login.")
+    public ApiResponse<Void> adminSetPassword(
+            @PathVariable UUID userId,
+            @Valid @RequestBody AdminSetPasswordRequest request) {
+        return userService.adminSetPassword(userId, request);
+    }
+
+    @PostMapping(value = "/admin/{userId}/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Upload/replace a user's avatar (admin)",
+            description = "Uploads an image (jpg/png/webp, ≤ 2 MB) to the target user's folder in the public " +
+                    "'avatars' bucket, updates their avatar_url, and removes the previous avatar file.")
+    public ApiResponse<UserResponse> adminUpdateAvatar(
+            @PathVariable UUID userId,
+            @RequestParam("file") MultipartFile file) {
+        return userService.adminUpdateAvatar(userId, file);
     }
 }
