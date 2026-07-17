@@ -9,7 +9,6 @@ import org.springframework.stereotype.Service;
 import su26.uml.be.entity.AiGenerationLog;
 import su26.uml.be.enums.EstimationMethod;
 import su26.uml.be.repository.AiGenerationLogRepository;
-import su26.uml.be.service.SystemConfigCacheService;
 import su26.uml.be.service.adminDashboard.AiBillingService;
 import su26.uml.be.service.adminDashboard.AiGenerationLogService;
 
@@ -22,18 +21,14 @@ import java.time.LocalDateTime;
 public class AiGenerationLogServiceImpl implements AiGenerationLogService {
 
     AiGenerationLogRepository aiGenerationLogRepository;
-    SystemConfigCacheService systemConfigCacheService;
     AiBillingService aiBillingService;
 
     @Async
     @Override
     public void log(String sessionId, String userId, int inputTokens, int outputTokens,
-                    EstimationMethod method, long latencyMs, boolean success, String errorMessage) {
+                    EstimationMethod method, long latencyMs, boolean success, String errorMessage,
+                    String provider, String modelName) {
         try {
-            SystemConfigCacheService.SystemConfig config = systemConfigCacheService.getActiveModel();
-            String modelName = config.modelName();
-            String provider = config.provider();
-
             AiBillingService.BillingResult billing = aiBillingService.calculateCost(
                     provider, modelName, inputTokens, outputTokens, method);
 

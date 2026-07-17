@@ -21,7 +21,6 @@ import java.util.regex.Pattern;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import su26.uml.be.config.anythingllm.AnythingLlmProperties;
 import su26.uml.be.dto.request.DiagramChatRequest;
 import su26.uml.be.dto.response.AiResponseKind;
 import su26.uml.be.dto.response.ApiResponse;
@@ -38,6 +37,7 @@ import su26.uml.be.exception.ErrorCode;
 import su26.uml.be.repository.AiChatMessageRepository;
 import su26.uml.be.repository.AiChatSessionRepository;
 import su26.uml.be.repository.UserRepository;
+import su26.uml.be.service.SystemConfigCacheService;
 import su26.uml.be.service.adminDashboard.ActivityTrackerService;
 import su26.uml.be.service.DiagramChatService;
 import su26.uml.be.service.QuotaService;
@@ -59,13 +59,13 @@ public class DiagramChatServiceImpl implements DiagramChatService {
     private static final int SOURCE_SNIPPET_MAX_LENGTH = 500;
     private static final int MAX_RETRIES = 3;
 
-    private final AnythingLlmProperties anythingLlmProperties;
     private final AiChatSessionRepository chatSessionRepository;
     private final AiChatMessageRepository chatMessageRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
     private final UmlArchitect umlArchitect;
     private final AiGenerationLogService aiGenerationLogService;
+    private final SystemConfigCacheService systemConfigCacheService;
     private final ActivityTrackerService activityTracker;
     private final QuotaService quotaService;
     private final RateLimiterService rateLimiterService;
@@ -130,15 +130,20 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             promptBuilder.append("LƯU Ý QUAN TRỌNG: Bạn phải trả về TOÀN BỘ sơ đồ cuối cùng (bao gồm cả các node cũ muốn giữ lại và các node mới). ");
             promptBuilder.append("Nếu một node có trong danh sách trên nhưng không có trong kết quả JSON của bạn, nó sẽ bị xóa khỏi màn hình.");
 
+            // Snapshot provider/model từ workspace trước khi gọi AI
+            var activeConfig = systemConfigCacheService.getActiveConfig();
+            String provider = activeConfig.provider();
+            String modelName = activeConfig.modelName();
+
             // Gọi AI với cơ chế Error Reflection + token extraction
             AiChatResult result;
             try {
                 result = callAiWithRetry(promptBuilder.toString(), MAX_RETRIES);
             } catch (AppException e) {
-                logAiError(session.getAnythingSessionId(), userId, request.getMessage(), e.getMessage());
+                logAiError(session.getAnythingSessionId(), userId, request.getMessage(), e.getMessage(), provider, modelName);
                 throw e;
             } catch (RuntimeException e) {
-                logAiError(session.getAnythingSessionId(), userId, request.getMessage(), e.getMessage());
+                logAiError(session.getAnythingSessionId(), userId, request.getMessage(), e.getMessage(), provider, modelName);
                 throw new AppException(ErrorCode.ANYTHING_LLM_ERROR);
             }
 
@@ -157,7 +162,7 @@ public class DiagramChatServiceImpl implements DiagramChatService {
                     userId,
                     session.getId(),
                     rawAnswer,
-                    anythingLlmProperties.modelName(),
+                    modelName,
                     response.getSources()
             );
 
@@ -165,7 +170,7 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             chatSessionRepository.save(session);
 
             // Async: log AI generation (không block response)
-            logAiGeneration(result, userId, session.getAnythingSessionId(), request.getMessage(), rawAnswer);
+            logAiGeneration(result, userId, session.getAnythingSessionId(), request.getMessage(), rawAnswer, provider, modelName);
 
             activityTracker.trackActivity(email);
 
@@ -213,6 +218,9 @@ public class DiagramChatServiceImpl implements DiagramChatService {
                 if (e.code() == 401) {
                     throw new AppException(ErrorCode.AI_PROVIDER_AUTH_FAILED, detail);
                 }
+                if (e.getMessage() != null && e.getMessage().toLowerCase().contains("embed")) {
+                    throw new AppException(ErrorCode.AI_OLLAMA_EMBEDDING_FAILED, detail);
+                }
                 throw new AppException(ErrorCode.AI_PROVIDER_UPSTREAM_ERROR, detail);
 
             } catch (Exception e) {
@@ -231,14 +239,17 @@ public class DiagramChatServiceImpl implements DiagramChatService {
 
     private record AiChatResult(DiagramChatResponse diagramResponse, Result<String> response, long latencyMs) {}
 
-    private void logAiError(String sessionId, String userId, String userMessage, String errorMessage) {
+    private void logAiError(String sessionId, String userId, String userMessage,
+                             String errorMessage, String provider, String modelName) {
         int inputTokens = estimateTokens(userMessage);
         aiGenerationLogService.log(sessionId, userId, inputTokens, 0,
-                EstimationMethod.JTOKKIT, 0, false, errorMessage);
+                EstimationMethod.JTOKKIT, 0, false, errorMessage,
+                provider, modelName);
     }
 
     private void logAiGeneration(AiChatResult result, String userId, String sessionId,
-                                   String userMessage, String assistantMessage) {
+                                   String userMessage, String assistantMessage,
+                                   String provider, String modelName) {
         TokenUsage usage = result.response().tokenUsage();
         int inputTokens;
         int outputTokens;
@@ -257,7 +268,8 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         aiGenerationLogService.log(
                 sessionId, userId,
                 inputTokens, outputTokens, method,
-                result.latencyMs(), true, null
+                result.latencyMs(), true, null,
+                provider, modelName
         );
     }
 

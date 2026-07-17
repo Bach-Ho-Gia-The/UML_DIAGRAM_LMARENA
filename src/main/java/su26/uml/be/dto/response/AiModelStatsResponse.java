@@ -35,4 +35,7 @@ public class AiModelStatsResponse {
 
     @Schema(description = "Total cost (USD) in period.", example = "4.20")
     BigDecimal totalCostUsd;
+
+    @Schema(description = "Total tokens consumed in period.", example = "1250000")
+    long totalTokens;
 }

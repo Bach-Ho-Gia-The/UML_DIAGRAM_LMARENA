@@ -211,6 +211,7 @@ public class DashboardServiceImpl implements DashboardService {
             BigDecimal cost = group.stream()
                     .map(AiGenerationLog::getCostUsd)
                     .reduce(BigDecimal.ZERO, BigDecimal::add);
+            long tokens = group.stream().mapToLong(AiGenerationLog::getTotalTokens).sum();
 
             result.add(AiModelStatsResponse.builder()
                     .provider(provider)
@@ -219,6 +220,7 @@ public class DashboardServiceImpl implements DashboardService {
                     .errorCount(errors)
                     .errorRate(rate)
                     .totalCostUsd(cost)
+                    .totalTokens(tokens)
                     .build());
         }
 

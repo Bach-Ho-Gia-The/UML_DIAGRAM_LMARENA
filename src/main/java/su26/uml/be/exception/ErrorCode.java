@@ -84,6 +84,7 @@ public enum ErrorCode {
     AI_PROVIDER_API_KEY_MISSING(1093, "Vui lòng cấu hình API key trước khi phát hiện model", HttpStatus.BAD_REQUEST),
     AI_PROVIDER_AUTH_FAILED(1094, "API key không hợp lệ hoặc hết hạn cho provider này", HttpStatus.UNAUTHORIZED),
     AI_PROVIDER_UPSTREAM_ERROR(1095, "Lỗi từ provider AI: ", HttpStatus.BAD_GATEWAY),
+    AI_OLLAMA_EMBEDDING_FAILED(1096, "[500] Ollama embedding không tìm thấy hoặc chưa được khởi động", HttpStatus.INTERNAL_SERVER_ERROR),
 
     // AUDIT LOG
     INVALID_DATE_RANGE(1092, "Khoảng thời gian không hợp lệ: 'from' phải trước hoặc bằng 'to'", HttpStatus.BAD_REQUEST),
