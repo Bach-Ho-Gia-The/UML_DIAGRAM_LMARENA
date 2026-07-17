@@ -152,6 +152,14 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             // Đồng bộ sessionId
             response.setSessionId(session.getAnythingSessionId());
 
+            // Question box KHÔNG tính 1 lượt: nếu AI còn hỏi lại (kind=QUESTIONS) thì hoàn lại
+            // lượt vừa reserve. Chỉ khi AI thôi hỏi (DIAGRAM/REPLY) mới giữ lượt → cả vòng
+            // hỏi–đáp tính đúng 1 request.
+            if (reserved && response.getKind() == AiResponseKind.QUESTIONS) {
+                quotaService.rollbackAiRequest(uid);
+                reserved = false; // tránh catch bên dưới rollback lần 2
+            }
+
             updateSessionTitleIfNeeded(session, request.getMessage());
 
             saveUserMessage(userId, session.getId(), request.getMessage());
