@@ -46,6 +46,10 @@ public class UserQuota extends BaseEntity {
     @Builder.Default
     int exportUsed = 0;
 
+    /** Subscription ID lúc snapshot (dùng để phát hiện đổi gói). */
+    @Column(name = "subscription_id")
+    UUID subscriptionId;
+
     /** Thời điểm reset kỳ (lazy). */
     @Column(name = "reset_at", nullable = false)
     LocalDateTime resetAt;

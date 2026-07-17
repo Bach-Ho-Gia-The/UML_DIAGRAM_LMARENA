@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import su26.uml.be.dto.response.QuotaResponse;
 import su26.uml.be.entity.Plan;
 import su26.uml.be.entity.PlanFeature;
+import su26.uml.be.entity.Subscription;
 import su26.uml.be.entity.UserQuota;
 import su26.uml.be.enums.PlanFeatureKey;
 import su26.uml.be.enums.PlanStatus;
@@ -22,6 +23,7 @@ import su26.uml.be.repository.UserRepository;
 import su26.uml.be.service.QuotaService;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.UUID;
 
 @Service
@@ -43,8 +45,8 @@ public class QuotaServiceImpl implements QuotaService {
     @Transactional
     public void reserveAiRequest(UUID userId) {
         UserQuota q = getOrCreate(userId);
-        applyLazyReset(q);
-        // Atomic: chỉ trừ khi còn quota (hoặc unlimited). flushAutomatically đẩy lazy-reset xuống DB trước.
+        syncQuotaToCurrentPlan(q, userId);
+        // Atomic: chỉ trừ khi còn quota (hoặc unlimited). flushAutomatically đẩy sync xuống DB trước.
         int updated = userQuotaRepository.tryReserveAi(userId);
         if (updated == 0) {
             throw new AppException(ErrorCode.QUOTA_EXCEEDED);
@@ -61,7 +63,7 @@ public class QuotaServiceImpl implements QuotaService {
     @Transactional
     public QuotaResponse getQuota(UUID userId) {
         UserQuota q = getOrCreate(userId);
-        applyLazyReset(q);
+        syncQuotaToCurrentPlan(q, userId);
         return QuotaResponse.builder()
                 .used(q.getAiUsed())
                 .limit(q.getAiLimit())
@@ -84,46 +86,54 @@ public class QuotaServiceImpl implements QuotaService {
         UserQuota q = getOrCreate(userId);
         q.setAiUsed(0);
         q.setExportUsed(0);
-        q.setAiLimit(aiLimitOf(currentPlan(userId)));
-        q.setResetAt(LocalDateTime.now().plusDays(periodDays));
-        userQuotaRepository.save(q);
+        applyPlanSnapshot(q, userId);
     }
 
     // --- helpers ---
 
     private UserQuota getOrCreate(UUID userId) {
         return userQuotaRepository.findByUserId(userId).orElseGet(() -> {
-            // Đua tạo song song (2 request đầu tiên cùng lúc) rất hiếm → nếu xảy ra sẽ ném
-            // DataIntegrityViolation và request đó fail 1 lần, client retry là có row.
-            Plan plan = currentPlan(userId);
-            return userQuotaRepository.save(UserQuota.builder()
+            UserQuota q = UserQuota.builder()
                     .userId(userId)
-                    .aiLimit(aiLimitOf(plan))
-                    .resetAt(LocalDateTime.now().plusDays(periodDays))
-                    .build());
+                    .aiLimit(0)
+                    .build();
+            applyPlanSnapshot(q, userId);
+            return q;
         });
     }
 
-    /** Reset lười khi hết kỳ: về 0 + cập nhật limit theo gói hiện tại + đẩy reset_at tới mốc tương lai. */
-    private void applyLazyReset(UserQuota q) {
+    /** Đồng bộ quota theo subscription hiện tại: reset nếu đổi sub hoặc hết kỳ. */
+    private void syncQuotaToCurrentPlan(UserQuota q, UUID userId) {
         LocalDateTime now = LocalDateTime.now();
-        if (q.getResetAt() != null && !q.getResetAt().isAfter(now)) {
-            LocalDateTime next = q.getResetAt();
-            while (!next.isAfter(now)) {
-                next = next.plusDays(periodDays);
-            }
+        var subOpt = subscriptionRepository
+                .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, now);
+        UUID newSubId = subOpt.map(Subscription::getId).orElse(null);
+        boolean periodExpired = q.getResetAt() != null && !q.getResetAt().isAfter(now);
+        boolean subChanged = !Objects.equals(newSubId, q.getSubscriptionId());
+
+        if (periodExpired || subChanged) {
             q.setAiUsed(0);
             q.setExportUsed(0);
-            q.setAiLimit(aiLimitOf(currentPlan(q.getUserId())));
-            q.setResetAt(next);
-            userQuotaRepository.save(q);
+            applyPlanSnapshot(q, userId); // sẽ save trong này
         }
     }
 
-    /** Gói hiện tại: subscription ACTIVE → gói; nếu không có → gói ACTIVE giá thấp nhất. */
+    /** Snapshot plan hiện tại vào quota (limit, subscriptionId, resetAt) — không reset used. */
+    private void applyPlanSnapshot(UserQuota q, UUID userId) {
+        var subOpt = subscriptionRepository
+                .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, LocalDateTime.now());
+        Plan plan = subOpt.map(Subscription::getPlan).orElseGet(() ->
+                planRepository.findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE).orElse(null));
+        q.setAiLimit(aiLimitOf(plan));
+        q.setSubscriptionId(subOpt.map(Subscription::getId).orElse(null));
+        q.setResetAt(subOpt.map(Subscription::getEndDate).orElse(LocalDateTime.MAX));
+        userQuotaRepository.save(q);
+    }
+
+    /** Gói hiện tại: subscription ACTIVE (chưa hết hạn) → gói; nếu không có → gói ACTIVE giá thấp nhất. */
     private Plan currentPlan(UUID userId) {
         return subscriptionRepository
-                .findFirstByUser_IdAndStatusOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE)
+                .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, LocalDateTime.now())
                 .map(s -> s.getPlan())
                 .orElseGet(() -> planRepository
                         .findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE)

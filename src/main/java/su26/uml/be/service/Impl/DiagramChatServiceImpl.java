@@ -218,8 +218,11 @@ public class DiagramChatServiceImpl implements DiagramChatService {
                 if (e.code() == 401) {
                     throw new AppException(ErrorCode.AI_PROVIDER_AUTH_FAILED, detail);
                 }
-                if (e.getMessage() != null && e.getMessage().toLowerCase().contains("embed")) {
-                    throw new AppException(ErrorCode.AI_OLLAMA_EMBEDDING_FAILED, detail);
+                if (e.getMessage() != null) {
+                    String msg = e.getMessage().toLowerCase();
+                    if (msg.contains("embed") || msg.contains("ollama") || msg.contains("connection refused")) {
+                        throw new AppException(ErrorCode.AI_OLLAMA_EMBEDDING_FAILED, detail);
+                    }
                 }
                 throw new AppException(ErrorCode.AI_PROVIDER_UPSTREAM_ERROR, detail);
 

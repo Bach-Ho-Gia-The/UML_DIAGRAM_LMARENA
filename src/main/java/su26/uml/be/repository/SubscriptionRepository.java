@@ -19,6 +19,9 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
     long countByPlanAndStatus(Plan plan, SubscriptionStatus status);
     boolean existsByPlanAndStatus(Plan plan, SubscriptionStatus status);
 
+    /** Gói ACTIVE hiện tại của user (mới nhất theo endDate), chỉ lấy sub chưa hết hạn. */
+    Optional<Subscription> findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(UUID userId, SubscriptionStatus status, LocalDateTime dateTime);
+
     /** Gói ACTIVE hiện tại của user (mới nhất theo endDate). */
     Optional<Subscription> findFirstByUser_IdAndStatusOrderByEndDateDesc(UUID userId, SubscriptionStatus status);
 }

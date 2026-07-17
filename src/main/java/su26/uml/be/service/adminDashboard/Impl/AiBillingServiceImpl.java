@@ -41,7 +41,7 @@ public class AiBillingServiceImpl implements AiBillingService {
             finalMethod = method == EstimationMethod.PROVIDER ? EstimationMethod.UNKNOWN : method;
         }
 
-        return new BillingResult(costUsd, finalMethod);
+        return new BillingResult(BigDecimal.ZERO, finalMethod);
     }
 
     private BigDecimal estimateFallbackCost(int inputTokens, int outputTokens, EstimationMethod method) {

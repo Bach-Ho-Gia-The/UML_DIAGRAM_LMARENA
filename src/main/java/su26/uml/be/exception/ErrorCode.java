@@ -83,7 +83,7 @@ public enum ErrorCode {
     AI_DOCUMENT_CONTENT_NOT_FOUND(1091, "Không tìm thấy nội dung document", HttpStatus.NOT_FOUND),
     AI_PROVIDER_API_KEY_MISSING(1093, "Vui lòng cấu hình API key trước khi phát hiện model", HttpStatus.BAD_REQUEST),
     AI_PROVIDER_AUTH_FAILED(1094, "API key không hợp lệ hoặc hết hạn cho provider này", HttpStatus.UNAUTHORIZED),
-    AI_PROVIDER_UPSTREAM_ERROR(1095, "Lỗi từ provider AI: ", HttpStatus.BAD_GATEWAY),
+    AI_PROVIDER_UPSTREAM_ERROR(1095, "Lỗi từ provider AI", HttpStatus.BAD_GATEWAY),
     AI_OLLAMA_EMBEDDING_FAILED(1096, "[500] Ollama embedding không tìm thấy hoặc chưa được khởi động", HttpStatus.INTERNAL_SERVER_ERROR),
 
     // AUDIT LOG

@@ -18,6 +18,7 @@ import su26.uml.be.repository.PlanRepository;
 import su26.uml.be.repository.SubscriptionRepository;
 import su26.uml.be.service.PlanLimitService;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
@@ -42,10 +43,10 @@ public class PlanLimitServiceImpl implements PlanLimitService {
         }
     }
 
-    /** Gói hiện tại: subscription ACTIVE → gói; nếu không có → gói ACTIVE giá thấp nhất. */
+    /** Gói hiện tại: subscription ACTIVE (chưa hết hạn) → gói; nếu không có → gói ACTIVE giá thấp nhất. */
     private Plan currentPlan(UUID userId) {
         return subscriptionRepository
-                .findFirstByUser_IdAndStatusOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE)
+                .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, LocalDateTime.now())
                 .map(Subscription::getPlan)
                 .orElseGet(() -> planRepository
                         .findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE)
