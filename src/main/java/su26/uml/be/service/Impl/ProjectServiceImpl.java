@@ -21,14 +21,20 @@ import su26.uml.be.entity.Project;
 import su26.uml.be.entity.ProjectVersion;
 import su26.uml.be.entity.Sheet;
 import su26.uml.be.entity.User;
+import su26.uml.be.enums.PlanFeatureKey;
 import su26.uml.be.exception.AppException;
 import su26.uml.be.exception.ErrorCode;
 import su26.uml.be.mapper.ProjectMapper;
+import su26.uml.be.mapper.SheetMapper;
+import su26.uml.be.mapper.WorkspaceItemMapper;
 import su26.uml.be.repository.ProjectRepository;
 import su26.uml.be.repository.ProjectVersionRepository;
 import su26.uml.be.repository.SheetRepository;
 import su26.uml.be.repository.UserRepository;
+import su26.uml.be.repository.WorkspaceItemRepository;
+import su26.uml.be.service.PlanLimitService;
 import su26.uml.be.service.ProjectService;
+import su26.uml.be.service.SocketService;
 
 @Service
 @RequiredArgsConstructor
@@ -40,9 +46,12 @@ public class ProjectServiceImpl implements ProjectService {
     UserRepository userRepository;
     ProjectVersionRepository projectVersionRepository;
     SheetRepository sheetRepository;
+    WorkspaceItemRepository workspaceItemRepository;
     ProjectMapper projectMapper;
-    su26.uml.be.service.SocketService socketService;
-    su26.uml.be.service.PlanLimitService planLimitService;
+    SheetMapper sheetMapper;
+    WorkspaceItemMapper workspaceItemMapper;
+    SocketService socketService;
+    PlanLimitService planLimitService;
     ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -54,7 +63,7 @@ public class ProjectServiceImpl implements ProjectService {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
-        planLimitService.assertCanCreate(user.getId(), su26.uml.be.enums.PlanFeatureKey.MAX_PROJECTS,
+        planLimitService.assertCanCreate(user.getId(), PlanFeatureKey.MAX_PROJECTS,
                 projectRepository.countByUserAndIsDeletedFalse(user));
 
         Project project = projectMapper.toProject(request);
@@ -69,16 +78,16 @@ public class ProjectServiceImpl implements ProjectService {
         Project savedProject = projectRepository.save(project);
 
         // Tạo Sheet mặc định cho Canvas JSON
-        Sheet defaultSheet = Sheet.builder()
-                .name("Sheet 1")
-                .orderIndex(0)
-                .diagramData("{\"nodes\": [], \"edges\": []}")
-                .project(savedProject)
-                .build();
+        Sheet defaultSheet = sheetMapper.toSheet(
+                "Sheet 1", 0, "{\"nodes\": [], \"edges\": []}", "activity", savedProject);
         sheetRepository.save(defaultSheet);
-        
+
         // Thêm vào list để response có dữ liệu sheet ngay lập tức
         savedProject.getSheets().add(defaultSheet);
+
+        // Sheet mặc định cũng phải hiện trong cây workspace: tạo DIAGRAM item gốc cùng tx
+        workspaceItemRepository.save(
+                workspaceItemMapper.toDiagramItem(defaultSheet, defaultSheet.getName(), 0, savedProject, user));
 
         log.info("Project created: {} with default sheet for user: {}", savedProject.getId(), email);
         return ApiResponse.success("Tạo dự án thành công", projectMapper.toProjectResponse(savedProject));

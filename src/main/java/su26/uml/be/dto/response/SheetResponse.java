@@ -16,6 +16,7 @@ public class SheetResponse {
     String name;
     Integer orderIndex;
     String diagramData;
+    String diagramType;
     UUID projectId;
     LocalDateTime createdAt;
     LocalDateTime updatedAt;

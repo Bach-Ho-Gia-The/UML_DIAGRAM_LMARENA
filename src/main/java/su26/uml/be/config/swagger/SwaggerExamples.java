@@ -309,6 +309,110 @@ public final class SwaggerExamples {
               "message": "Xóa các dự án thành công"
             }""";
 
+    // ─── Workspace Items (project file tree) ──────────────────────────────
+    public static final String WORKSPACE_ITEM_RESPONSE = """
+            {
+              "code": 200,
+              "message": "Tạo mục workspace thành công",
+              "result": {
+                "id": "6fa85f64-5717-4562-b3fc-2c963f66afa1",
+                "projectId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                "parentId": null,
+                "name": "Checkout Sequence",
+                "kind": "DIAGRAM",
+                "orderIndex": 0,
+                "sheetId": "4fa85f64-5717-4562-b3fc-2c963f66afa7",
+                "diagramType": "sequence",
+                "version": 0,
+                "createdAt": "2026-07-17T10:00:00",
+                "updatedAt": "2026-07-17T10:00:00"
+              }
+            }""";
+
+    public static final String WORKSPACE_ITEM_LIST_RESPONSE = """
+            {
+              "code": 200,
+              "message": "Lấy danh sách mục workspace thành công",
+              "result": [
+                {
+                  "id": "5fa85f64-5717-4562-b3fc-2c963f66afa0",
+                  "projectId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "parentId": null,
+                  "name": "Requirements",
+                  "kind": "FOLDER",
+                  "orderIndex": 0,
+                  "version": 0,
+                  "createdAt": "2026-07-17T10:00:00",
+                  "updatedAt": "2026-07-17T10:00:00"
+                },
+                {
+                  "id": "7fa85f64-5717-4562-b3fc-2c963f66afa2",
+                  "projectId": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                  "parentId": "5fa85f64-5717-4562-b3fc-2c963f66afa0",
+                  "name": "requirements.md",
+                  "kind": "MARKDOWN",
+                  "orderIndex": 0,
+                  "content": "# Requirements",
+                  "version": 2,
+                  "createdAt": "2026-07-17T10:00:00",
+                  "updatedAt": "2026-07-17T10:05:00"
+                }
+              ]
+            }""";
+
+    public static final String DELETE_WORKSPACE_ITEMS_RESPONSE = """
+            {
+              "code": 200,
+              "message": "Xóa các mục workspace thành công"
+            }""";
+
+    // ─── Diagram Versions ──────────────────────────────────────────────────
+    public static final String DIAGRAM_VERSION_RESPONSE = """
+            {
+              "code": 200,
+              "message": "Tạo phiên bản sơ đồ thành công",
+              "result": {
+                "id": "8fa85f64-5717-4562-b3fc-2c963f66afa3",
+                "sheetId": "4fa85f64-5717-4562-b3fc-2c963f66afa7",
+                "versionNumber": 5,
+                "name": "Before payment refactor",
+                "note": "Stable checkout workflow",
+                "source": "MANUAL",
+                "diagramData": "{\\"schemaVersion\\":1,\\"diagramType\\":\\"sequence\\",\\"nodes\\":[],\\"edges\\":[]}",
+                "contentHash": "9b74c9897bac770ffc029102a200c5de",
+                "schemaVersion": 1,
+                "createdAt": "2026-07-17T10:00:00"
+              }
+            }""";
+
+    public static final String DIAGRAM_VERSION_LIST_RESPONSE = """
+            {
+              "code": 200,
+              "message": "Lấy danh sách phiên bản sơ đồ thành công",
+              "result": [
+                {
+                  "id": "8fa85f64-5717-4562-b3fc-2c963f66afa3",
+                  "sheetId": "4fa85f64-5717-4562-b3fc-2c963f66afa7",
+                  "versionNumber": 5,
+                  "name": "Before payment refactor",
+                  "source": "MANUAL",
+                  "contentHash": "9b74c9897bac770ffc029102a200c5de",
+                  "schemaVersion": 1,
+                  "createdAt": "2026-07-17T10:00:00"
+                },
+                {
+                  "id": "7fa85f64-5717-4562-b3fc-2c963f66afa9",
+                  "sheetId": "4fa85f64-5717-4562-b3fc-2c963f66afa7",
+                  "versionNumber": 4,
+                  "name": "Auto checkpoint",
+                  "source": "AUTO",
+                  "contentHash": "1a74c9897bac770ffc029102a200c111",
+                  "schemaVersion": 1,
+                  "createdAt": "2026-07-17T09:45:00"
+                }
+              ]
+            }""";
+
     // ─── Audit Log ──────────────────────────────────────
     /**
      * Danh mục action được ghi log — dùng trong mô tả Swagger. Dropdown lọc nên lấy ĐỘNG từ

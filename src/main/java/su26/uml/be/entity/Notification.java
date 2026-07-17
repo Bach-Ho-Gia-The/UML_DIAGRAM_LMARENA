@@ -3,6 +3,7 @@ package su26.uml.be.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
+import lombok.experimental.SuperBuilder;
 import su26.uml.be.enums.NotificationSeverity;
 
 @Entity
@@ -10,7 +11,7 @@ import su26.uml.be.enums.NotificationSeverity;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@Builder
+@SuperBuilder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class Notification extends BaseEntity {
 

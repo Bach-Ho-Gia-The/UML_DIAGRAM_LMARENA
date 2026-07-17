@@ -36,21 +36,25 @@ public class SheetController {
             @AuthenticationPrincipal UserDetails userDetails,
             @Valid @RequestBody SheetRequest request) {
         activityTracker.trackActivity(userDetails.getUsername());
-        return sheetService.createSheet(request);
+        return sheetService.createSheet(userDetails.getUsername(), request);
     }
 
     @GetMapping("/project/{projectId}")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @Operation(summary = "Get all sheets for a project", description = "Returns all sheets belonging to a project.")
-    public ApiResponse<List<SheetResponse>> getSheetsByProject(@PathVariable UUID projectId) {
-        return sheetService.getSheetsByProject(projectId);
+    public ApiResponse<List<SheetResponse>> getSheetsByProject(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable UUID projectId) {
+        return sheetService.getSheetsByProject(userDetails.getUsername(), projectId);
     }
 
     @GetMapping("/{sheetId}")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @Operation(summary = "Get sheet by ID")
-    public ApiResponse<SheetResponse> getSheetById(@PathVariable UUID sheetId) {
-        return sheetService.getSheetById(sheetId);
+    public ApiResponse<SheetResponse> getSheetById(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable UUID sheetId) {
+        return sheetService.getSheetById(userDetails.getUsername(), sheetId);
     }
 
     @PatchMapping("/{sheetId}")
@@ -61,13 +65,15 @@ public class SheetController {
             @PathVariable UUID sheetId,
             @Valid @RequestBody SheetRequest request) {
         activityTracker.trackActivity(userDetails.getUsername());
-        return sheetService.updateSheet(sheetId, request);
+        return sheetService.updateSheet(userDetails.getUsername(), sheetId, request);
     }
 
     @DeleteMapping("/{sheetId}")
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
     @Operation(summary = "Delete sheet")
-    public ApiResponse<Void> deleteSheet(@PathVariable UUID sheetId) {
-        return sheetService.deleteSheet(sheetId);
+    public ApiResponse<Void> deleteSheet(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable UUID sheetId) {
+        return sheetService.deleteSheet(userDetails.getUsername(), sheetId);
     }
 }

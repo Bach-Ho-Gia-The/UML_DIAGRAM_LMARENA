@@ -151,6 +151,32 @@ public enum ErrorCode {
     QUOTA_EXCEEDED(2130, "Bạn đã dùng hết lượt AI trong kỳ. Hãy nâng gói hoặc đợi kỳ sau.", HttpStatus.PAYMENT_REQUIRED),
     RATE_LIMIT_EXCEEDED(2131, "Bạn đang yêu cầu quá nhiều lần, vui lòng chờ.", HttpStatus.TOO_MANY_REQUESTS),
     PLAN_LIMIT_EXCEEDED(2132, "Bạn đã đạt giới hạn của gói. Hãy nâng gói để dùng thêm.", HttpStatus.FORBIDDEN),
+
+    // WORKSPACE ITEM (project file tree) ERRORS
+    WORKSPACE_ITEM_NOT_FOUND(2200, "Không tìm thấy mục trong workspace", HttpStatus.NOT_FOUND),
+    WORKSPACE_PARENT_NOT_FOUND(2201, "Không tìm thấy thư mục cha", HttpStatus.NOT_FOUND),
+    WORKSPACE_PARENT_NOT_FOLDER(2202, "Mục cha phải là một thư mục", HttpStatus.BAD_REQUEST),
+    WORKSPACE_DUPLICATE_NAME(2203, "Tên này đã tồn tại trong thư mục hiện tại", HttpStatus.BAD_REQUEST),
+    WORKSPACE_TREE_CYCLE(2204, "Không thể di chuyển thư mục vào chính nó hoặc thư mục con của nó", HttpStatus.CONFLICT),
+    WORKSPACE_FOLDER_NOT_EMPTY(2205, "Thư mục còn nội dung bên trong. Hãy xóa đệ quy hoặc dọn trống trước.", HttpStatus.CONFLICT),
+    WORKSPACE_VERSION_CONFLICT(2206, "Mục này vừa được người khác thay đổi. Vui lòng tải lại rồi thử lại.", HttpStatus.CONFLICT),
+    WORKSPACE_NAME_REQUIRED(2207, "Tên mục không được để trống", HttpStatus.BAD_REQUEST),
+    WORKSPACE_NAME_TOO_LONG(2208, "Tên mục không được vượt quá 255 ký tự", HttpStatus.BAD_REQUEST),
+    WORKSPACE_KIND_REQUIRED(2209, "Loại mục (FOLDER/MARKDOWN/DIAGRAM) không được để trống", HttpStatus.BAD_REQUEST),
+    WORKSPACE_CONTENT_NOT_ALLOWED(2210, "Chỉ file Markdown mới có nội dung văn bản", HttpStatus.BAD_REQUEST),
+    WORKSPACE_MARKDOWN_TOO_LARGE(2211, "Nội dung Markdown vượt quá giới hạn 2MB", HttpStatus.PAYLOAD_TOO_LARGE),
+    WORKSPACE_MAX_DEPTH_EXCEEDED(2212, "Cây thư mục vượt quá độ sâu tối đa cho phép (50)", HttpStatus.BAD_REQUEST),
+    WORKSPACE_IDS_REQUIRED(2213, "Danh sách mục cần xóa không được để trống", HttpStatus.BAD_REQUEST),
+    WORKSPACE_ITEMS_SAME_PROJECT(2214, "Các mục được chọn phải thuộc cùng một dự án", HttpStatus.BAD_REQUEST),
+
+    // DIAGRAM VERSION HISTORY ERRORS
+    DIAGRAM_VERSION_NOT_FOUND(2220, "Không tìm thấy phiên bản sơ đồ", HttpStatus.NOT_FOUND),
+    DIAGRAM_VERSION_DATA_REQUIRED(2221, "Dữ liệu snapshot không được để trống", HttpStatus.BAD_REQUEST),
+    DIAGRAM_VERSION_DATA_INVALID(2222, "Dữ liệu snapshot không phải JSON hợp lệ", HttpStatus.BAD_REQUEST),
+    DIAGRAM_VERSION_TOO_LARGE(2223, "Snapshot vượt quá giới hạn 2MB", HttpStatus.PAYLOAD_TOO_LARGE),
+    DIAGRAM_VERSION_SOURCE_REQUIRED(2224, "Nguồn tạo phiên bản (AUTO/MANUAL/...) không được để trống", HttpStatus.BAD_REQUEST),
+    DIAGRAM_VERSION_NAME_TOO_LONG(2225, "Tên phiên bản không được vượt quá 255 ký tự", HttpStatus.BAD_REQUEST),
+    DIAGRAM_VERSION_SHEET_MISMATCH(2226, "Phiên bản không thuộc trang biểu đồ này", HttpStatus.BAD_REQUEST),
     ;
 
     private int code;

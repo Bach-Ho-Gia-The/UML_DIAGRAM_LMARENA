@@ -10,6 +10,9 @@ import java.util.List;
 @Mapper(componentModel = "spring")
 public interface NotificationMapper {
 
+    // Entity field `boolean isRead` → getter isRead() → property "read"; target DTO property là "isRead"
+    // nên MapStruct không tự khớp — thiếu dòng này thì response luôn trả isRead=false.
+    @Mapping(target = "isRead", source = "read")
     @Mapping(target = "severity", source = "severity")
     NotificationResponse toNotificationResponse(Notification notification);
 

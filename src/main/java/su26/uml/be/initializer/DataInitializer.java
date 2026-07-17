@@ -12,15 +12,28 @@ import lombok.extern.slf4j.Slf4j;
 import su26.uml.be.entity.FeatureCatalog;
 import su26.uml.be.entity.Role;
 import su26.uml.be.entity.Plan;
+import su26.uml.be.entity.Sheet;
 import su26.uml.be.entity.User;
+import su26.uml.be.entity.WorkspaceItem;
 import su26.uml.be.enums.PlanFeatureKey;
 import su26.uml.be.enums.UserStatus;
+import su26.uml.be.mapper.WorkspaceItemMapper;
 import su26.uml.be.repository.FeatureCatalogRepository;
 import su26.uml.be.repository.RoleRepository;
 import su26.uml.be.repository.PlanRepository;
+import su26.uml.be.repository.SheetRepository;
 import su26.uml.be.repository.UserRepository;
+import su26.uml.be.repository.WorkspaceItemRepository;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Component
@@ -34,8 +47,12 @@ public class DataInitializer implements CommandLineRunner {
     RoleRepository roleRepository;
     PlanRepository planRepository;
     FeatureCatalogRepository featureCatalogRepository;
+    SheetRepository sheetRepository;
+    WorkspaceItemRepository workspaceItemRepository;
+    WorkspaceItemMapper workspaceItemMapper;
     PasswordEncoder passwordEncoder;
     JdbcTemplate jdbcTemplate;
+    ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public void run(String... args) {
@@ -66,6 +83,9 @@ public class DataInitializer implements CommandLineRunner {
 
         // 4. Backfill profile_completed for rows created before the column existed.
         backfillProfileCompleted();
+
+        // 5. Workspace file tree: backfill sheets.diagram_type + one root DIAGRAM item per sheet.
+        backfillWorkspaceItems();
 
         log.info("Data initialization completed.");
     }
@@ -264,6 +284,75 @@ public class DataInitializer implements CommandLineRunner {
         });
         userRepository.saveAll(pending);
         log.info("Backfilled profile_completed for {} existing user(s).", pending.size());
+    }
+
+    /**
+     * Idempotent backfill for the workspace file tree feature:
+     * (1) sheets created before the {@code diagram_type} column get it derived from their
+     *     diagramData JSON (fallback "activity" when absent/invalid);
+     * (2) every sheet without a workspace item gets exactly one root DIAGRAM item — the unique
+     *     index on {@code workspace_items.sheet_id} guarantees reruns never create duplicates.
+     *     Duplicate root names within a project are resolved with a deterministic suffix "(2)", "(3)"...
+     */
+    private void backfillWorkspaceItems() {
+        List<Sheet> sheets = sheetRepository.findAll();
+        if (sheets.isEmpty()) return;
+
+        // (1) diagram_type
+        List<Sheet> typeChanged = new ArrayList<>();
+        for (Sheet sheet : sheets) {
+            if (sheet.getDiagramType() == null) {
+                sheet.setDiagramType(deriveDiagramType(sheet.getDiagramData()));
+                typeChanged.add(sheet);
+            }
+        }
+        if (!typeChanged.isEmpty()) {
+            sheetRepository.saveAll(typeChanged);
+            log.info("Backfilled diagram_type for {} sheet(s).", typeChanged.size());
+        }
+
+        // (2) root DIAGRAM item per sheet — track root names/counts per project for dedupe/orderIndex
+        Map<UUID, Set<String>> rootNamesByProject = new HashMap<>();
+        Map<UUID, Integer> rootCountByProject = new HashMap<>();
+        for (WorkspaceItem item : workspaceItemRepository.findAll()) {
+            if (item.getParent() != null) continue;
+            UUID projectId = item.getProject().getId();
+            rootNamesByProject.computeIfAbsent(projectId, k -> new HashSet<>()).add(item.getName().toLowerCase());
+            rootCountByProject.merge(projectId, 1, Integer::sum);
+        }
+
+        List<WorkspaceItem> created = new ArrayList<>();
+        for (Sheet sheet : sheets) {
+            if (workspaceItemRepository.existsBySheet(sheet)) continue;
+
+            UUID projectId = sheet.getProject().getId();
+            Set<String> usedNames = rootNamesByProject.computeIfAbsent(projectId, k -> new HashSet<>());
+            String name = sheet.getName();
+            int suffix = 2;
+            while (usedNames.contains(name.toLowerCase())) {
+                name = sheet.getName() + " (" + suffix++ + ")";
+            }
+            usedNames.add(name.toLowerCase());
+            int orderIndex = rootCountByProject.merge(projectId, 1, Integer::sum) - 1;
+
+            created.add(workspaceItemMapper.toDiagramItem(
+                    sheet, name, orderIndex, sheet.getProject(), sheet.getProject().getUser()));
+        }
+        if (!created.isEmpty()) {
+            workspaceItemRepository.saveAll(created);
+            log.info("Backfilled {} workspace item(s) for existing sheet(s).", created.size());
+        }
+    }
+
+    private String deriveDiagramType(String diagramData) {
+        if (diagramData == null || diagramData.isBlank()) return "activity";
+        try {
+            JsonNode node = objectMapper.readTree(diagramData);
+            String type = node.path("diagramType").asText(null);
+            return (type == null || type.isBlank()) ? "activity" : type;
+        } catch (Exception e) {
+            return "activity";
+        }
     }
 
     private Role initRole(String roleName, String description) {

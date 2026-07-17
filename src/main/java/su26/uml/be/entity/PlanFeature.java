@@ -3,6 +3,7 @@ package su26.uml.be.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
+import lombok.experimental.SuperBuilder;
 import su26.uml.be.enums.PlanFeatureKey;
 
 @Entity
@@ -11,7 +12,7 @@ import su26.uml.be.enums.PlanFeatureKey;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
-@Builder
+@SuperBuilder
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class PlanFeature extends BaseEntity {
 
