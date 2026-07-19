@@ -294,7 +294,20 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         String cleanJson = rawResponse.replaceAll("(?s)<think>.*?</think>", "").trim();
 
         // 2. Chuẩn hóa dấu ngoặc kép (xử lý trường hợp AI nhả ra dấu ngoặc kép thông minh/curly quotes)
-        cleanJson = cleanJson.replace("“", "\"").replace("”", "\"").replace("‘", "'").replace("’", "'");
+        //    Mở rộng từ 4 ký tự gốc sang đầy đủ các loại quote unicode phổ biến để giảm parse-fail do quote lạ.
+        cleanJson = cleanJson
+                .replace("“", "\"")
+                .replace("”", "\"")
+                .replace("‘", "'")
+                .replace("’", "'")
+                // Guillemets (Pháp/Nga/Đức…)
+                .replace("«", "\"")
+                .replace("»", "\"")
+                .replace("‹", "'")
+                .replace("›", "'")
+                // Low/high double quotes (German style)
+                .replace("„", "\"")
+                .replace("‚", "'");
 
         // 3. Trích xuất JSON từ Markdown code blocks (nếu có)
         Pattern pattern = Pattern.compile("(?s)```(?:json)?\\s*(.*?)\\s*```");
@@ -327,22 +340,32 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         // Thử parse JSON, nếu không phải JSON (text thường / lời từ chối / chit-chat), fallback về REPLY
         try {
             if (cleanJson.startsWith("[")) {
+                // E-03: nếu AI trả [a, b, c], ưu tiên lấy phần tử DIAGRAM (state cuối cùng);
+                // nếu không có diagram thì lấy phần tử đầu. Tuyệt đối KHÔNG lấy đại phần tử 0 vì có thể
+                // là reply/questions phụ đi kèm → mất state thật.
                 List<DiagramChatResponse> list = objectMapper.readValue(cleanJson, new TypeReference<List<DiagramChatResponse>>() {});
                 if (list != null && !list.isEmpty()) {
-                    DiagramChatResponse res = list.get(0);
-                    validateAiResponse(res);
-                    return res;
+                    DiagramChatResponse chosen = list.stream()
+                            .filter(r -> r != null && r.getKind() == AiResponseKind.DIAGRAM)
+                            .findFirst()
+                            .orElse(list.get(0));
+                    validateAiResponse(chosen);
+                    return chosen;
                 }
             }
             DiagramChatResponse res = objectMapper.readValue(cleanJson, DiagramChatResponse.class);
             validateAiResponse(res);
             return res;
         } catch (Exception e) {
+            // E-05: trước đây fallback REPLY giữ nguyên rawResponse (kể cả khi raw là JSON lỗi) →
+            // user thấy JSON rỗng rỗng trong khung chat. Giờ trả message thân thiện để user hiểu
+            // và mô tả lại.
             log.warn("AI returned non-JSON response or invalid JSON. Falling back to REPLY. Raw: {}", rawResponse);
-            String textAnswer = rawResponse.replaceAll("(?s)<think>.*?</think>", "").trim();
+            String friendly = "AI đã trả về kết quả không đúng định dạng JSON. "
+                    + "Bro thử mô tả lại yêu cầu bằng câu ngắn gọn hơn giúp tôi nhé.";
             return DiagramChatResponse.builder()
                     .kind(AiResponseKind.REPLY)
-                    .answer(textAnswer)
+                    .answer(friendly)
                     .build();
         }
     }
@@ -363,10 +386,40 @@ public class DiagramChatServiceImpl implements DiagramChatService {
                 }
             }
             if (response.getNodes() != null) {
-                java.util.Set<String> validNodeTypes = java.util.Set.of("action", "decision", "start", "final", "fork", "cls", "component", "usecase", "actor", "note", "package");
+                java.util.Set<String> validNodeTypes = java.util.Set.of("action", "decision", "start", "final", "fork", "cls", "class", "component", "usecase", "actor", "note", "package");
                 for (var node : response.getNodes()) {
                     if (node.getType() == null || !validNodeTypes.contains(node.getType().toLowerCase())) {
                         throw new RuntimeException("Invalid node type: '" + (node != null ? node.getType() : "null") + "'. Allowed: " + validNodeTypes);
+                    }
+                    // Auto-alias: AI đôi khi trả "class" thay vì "cls" (vì prompt
+                    // cũng dùng chữ "class" trong diagramType). Map về "cls" để
+                    // FE render đúng component.
+                    if ("class".equalsIgnoreCase(node.getType())) {
+                        node.setType("cls");
+                    }
+                }
+
+                // E-01 (nâng cấp): parentId hợp lệ
+                // - Nếu node khai báo parentId != null, BẮT BUỘC phải có 1 node khác
+                //   trong cùng response có id == parentId. Nếu không → throw để retry.
+                // - Actor tuyệt đối KHÔNG được có parentId (system prompt yêu cầu actor ngoài package).
+                java.util.Set<String> nodeIds = response.getNodes().stream()
+                        .map(su26.uml.be.dto.response.AiNodeDto::getId)
+                        .filter(java.util.Objects::nonNull)
+                        .collect(java.util.stream.Collectors.toSet());
+                for (var node : response.getNodes()) {
+                    if (node == null) continue;
+                    String parentId = node.getParentId();
+                    if (parentId != null && !parentId.isBlank()) {
+                        if (!nodeIds.contains(parentId)) {
+                            throw new RuntimeException("Node '" + node.getId() + "' has parentId='" + parentId
+                                    + "' but no node with that id exists in the response. "
+                                    + "Make sure the parent node is included in the nodes array.");
+                        }
+                    }
+                    if ("actor".equalsIgnoreCase(node.getType()) && parentId != null && !parentId.isBlank()) {
+                        throw new RuntimeException("Node '" + node.getId() + "' is type 'actor' but has parentId='"
+                                + parentId + "'. Actors must stay outside any package (parentId must be null).");
                     }
                 }
             }
@@ -375,6 +428,29 @@ public class DiagramChatServiceImpl implements DiagramChatService {
                 for (var edge : response.getEdges()) {
                     if (edge.getRelation() == null || !validRelations.contains(edge.getRelation().toLowerCase())) {
                         throw new RuntimeException("Invalid edge relation: '" + (edge != null ? edge.getRelation() : "null") + "'. Allowed: " + validRelations);
+                    }
+                }
+            }
+        }
+
+        // Validate QUESTIONS mode: option bắt buộc cho single/multiple.
+        // Thay đổi rule mới: ép AI luôn đưa options khi mode = single/multiple,
+        // chỉ mode = "text" mới được phép options null/empty.
+        if (response.getKind() == AiResponseKind.QUESTIONS && response.getQuestions() != null) {
+            java.util.Set<String> validQuestionModes = java.util.Set.of("single", "multiple", "text");
+            for (var q : response.getQuestions()) {
+                if (q == null) continue;
+                String qMode = q.getMode() == null ? "" : q.getMode().toLowerCase();
+                if (!validQuestionModes.contains(qMode)) {
+                    throw new RuntimeException("Invalid question mode: '" + q.getMode() + "'. Allowed: " + validQuestionModes);
+                }
+                // single/multiple: bắt buộc có options với >= 2 item
+                if ("single".equals(qMode) || "multiple".equals(qMode)) {
+                    if (q.getOptions() == null || q.getOptions().size() < 2) {
+                        throw new RuntimeException("Question '" + q.getId() + "' has mode='" + q.getMode()
+                                + "' but options is null or has < 2 items. "
+                                + "For single/multiple mode, you MUST provide at least 2 options. "
+                                + "If a free-form answer is needed, use mode='text' instead.");
                     }
                 }
             }
