@@ -155,7 +155,7 @@ public enum ErrorCode {
     // WORKSPACE ITEM (project file tree) ERRORS
     WORKSPACE_ITEM_NOT_FOUND(2200, "Không tìm thấy mục trong workspace", HttpStatus.NOT_FOUND),
     WORKSPACE_PARENT_NOT_FOUND(2201, "Không tìm thấy thư mục cha", HttpStatus.NOT_FOUND),
-    WORKSPACE_PARENT_NOT_FOLDER(2202, "Mục cha phải là một thư mục", HttpStatus.BAD_REQUEST),
+    WORKSPACE_PARENT_NOT_FOLDER(2202, "Chỉ có thể di chuyển vào thư mục. Hãy tạo một thư mục trước, rồi di chuyển tệp vào đó.", HttpStatus.BAD_REQUEST),
     WORKSPACE_DUPLICATE_NAME(2203, "Tên này đã tồn tại trong thư mục hiện tại", HttpStatus.BAD_REQUEST),
     WORKSPACE_TREE_CYCLE(2204, "Không thể di chuyển thư mục vào chính nó hoặc thư mục con của nó", HttpStatus.CONFLICT),
     WORKSPACE_FOLDER_NOT_EMPTY(2205, "Thư mục còn nội dung bên trong. Hãy xóa đệ quy hoặc dọn trống trước.", HttpStatus.CONFLICT),

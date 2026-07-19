@@ -6,6 +6,10 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,7 +20,10 @@ import lombok.extern.slf4j.Slf4j;
 import su26.uml.be.dto.request.DeleteProjectRequest;
 import su26.uml.be.dto.request.ProjectRequest;
 import su26.uml.be.dto.response.ApiResponse;
+import su26.uml.be.dto.response.OwnerGroupResponse;
+import su26.uml.be.dto.response.PagedResponse;
 import su26.uml.be.dto.response.ProjectResponse;
+import su26.uml.be.dto.response.ProjectStatsResponse;
 import su26.uml.be.entity.Project;
 import su26.uml.be.entity.ProjectVersion;
 import su26.uml.be.entity.Sheet;
@@ -165,26 +172,61 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
-    public ApiResponse<List<ProjectResponse>> getAllUserProjects(String email, Boolean isDraft) {
+    public ApiResponse<PagedResponse<ProjectResponse>> getAllUserProjects(String email, Boolean isDraft, Pageable pageable) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
 
-        List<Project> projects;
+        Page<Project> projects;
         if (isDraft == null) {
-            projects = projectRepository.findAllByUserAndIsDeletedFalse(user);
+            projects = projectRepository.findAllByUserAndIsDeletedFalse(user, pageable);
         } else if (isDraft) {
-            projects = projectRepository.findAllByUserAndIsDeletedFalseAndIsDraftTrue(user);
+            projects = projectRepository.findAllByUserAndIsDeletedFalseAndIsDraftTrue(user, pageable);
         } else {
-            projects = projectRepository.findAllByUserAndIsDeletedFalseAndIsDraftFalse(user);
+            projects = projectRepository.findAllByUserAndIsDeletedFalseAndIsDraftFalse(user, pageable);
         }
-        return ApiResponse.success("Lấy danh sách dự án thành công", projectMapper.toProjectResponseList(projects));
+        return ApiResponse.success("Lấy danh sách dự án thành công",
+                PagedResponse.from(projects.map(projectMapper::toProjectResponse)));
     }
 
     @Override
     @Transactional(readOnly = true)
-    public ApiResponse<List<ProjectResponse>> getAllProjectsForAdmin() {
-        List<Project> projects = projectRepository.findAllByIsDeletedFalseAndIsDraftFalse();
-        return ApiResponse.success("Lấy danh sách tất cả dự án thành công (Admin)", projectMapper.toProjectResponseList(projects));
+    public ApiResponse<PagedResponse<ProjectResponse>> getAllProjectsForAdmin(Pageable pageable) {
+        Page<Project> projects = projectRepository.findAllByIsDeletedFalseAndIsDraftFalse(pageable);
+        return ApiResponse.success("Lấy danh sách tất cả dự án thành công (Admin)",
+                PagedResponse.from(projects.map(projectMapper::toProjectResponse)));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ApiResponse<ProjectStatsResponse> getAdminProjectStats() {
+        long total = projectRepository.countByIsDeletedFalse();
+        long drafts = projectRepository.countByIsDeletedFalseAndIsDraftTrue();
+        long onTrack = projectRepository.countByIsDeletedFalseAndIsDraftFalse();
+        ProjectStatsResponse stats = ProjectStatsResponse.builder()
+                .total(total)
+                .onTrack(onTrack)
+                .needAttention(0)
+                .drafts(drafts)
+                .build();
+        return ApiResponse.success("Lấy thống kê dự án thành công (Admin)", stats);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ApiResponse<PagedResponse<OwnerGroupResponse>> getAdminProjectOwners(int page, int size) {
+        // ORDER BY đã cố định trong query (count desc) → PageRequest không kèm Sort
+        Page<OwnerGroupResponse> owners = projectRepository.findOwnerGroups(PageRequest.of(page, size));
+        return ApiResponse.success("Lấy danh sách chủ sở hữu dự án thành công (Admin)",
+                PagedResponse.from(owners));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ApiResponse<PagedResponse<ProjectResponse>> getAdminProjectsByOwner(UUID ownerId, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "updatedAt"));
+        Page<Project> projects = projectRepository.findAllByUser_IdAndIsDeletedFalse(ownerId, pageable);
+        return ApiResponse.success("Lấy danh sách dự án theo chủ sở hữu thành công (Admin)",
+                PagedResponse.from(projects.map(projectMapper::toProjectResponse)));
     }
 
     private Project getProjectAndValidateOwnership(UUID projectId, String email) {

@@ -20,6 +20,7 @@ import su26.uml.be.exception.ErrorCode;
 import su26.uml.be.enums.PlanFeatureKey;
 import su26.uml.be.mapper.SheetMapper;
 import su26.uml.be.mapper.WorkspaceItemMapper;
+import su26.uml.be.repository.DiagramVersionRepository;
 import su26.uml.be.repository.ProjectRepository;
 import su26.uml.be.repository.SheetRepository;
 import su26.uml.be.repository.WorkspaceItemRepository;
@@ -46,6 +47,7 @@ public class SheetServiceImpl implements SheetService {
     SheetRepository sheetRepository;
     ProjectRepository projectRepository;
     WorkspaceItemRepository workspaceItemRepository;
+    DiagramVersionRepository diagramVersionRepository;
     SheetMapper sheetMapper;
     WorkspaceItemMapper workspaceItemMapper;
     PlanLimitService planLimitService;
@@ -120,6 +122,9 @@ public class SheetServiceImpl implements SheetService {
             workspaceItemRepository.delete(item);
             workspaceItemRepository.flush();
         });
+
+        // Xóa lịch sử version trước (FK diagram_versions.sheet_id NOT NULL, không cascade)
+        diagramVersionRepository.deleteAllBySheetIn(List.of(sheet));
 
         sheetRepository.delete(sheet);
         socketService.broadcastWorkspaceChanged(sheet.getProject().getId());

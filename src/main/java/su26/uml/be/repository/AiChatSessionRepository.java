@@ -1,5 +1,7 @@
 package su26.uml.be.repository;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.mongodb.repository.MongoRepository;
 import su26.uml.be.entity.AiChatSessionDocument;
 
@@ -17,4 +19,7 @@ public interface AiChatSessionRepository
 
     List<AiChatSessionDocument>
     findByUserIdOrderByUpdatedAtDesc(String userId);
+
+    Page<AiChatSessionDocument>
+    findByUserIdOrderByUpdatedAtDesc(String userId, Pageable pageable);
 }

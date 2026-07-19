@@ -9,6 +9,9 @@ import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -17,11 +20,13 @@ import su26.uml.be.config.swagger.SwaggerExamples;
 import su26.uml.be.dto.request.DeleteProjectRequest;
 import su26.uml.be.dto.request.ProjectRequest;
 import su26.uml.be.dto.response.ApiResponse;
+import su26.uml.be.dto.response.OwnerGroupResponse;
+import su26.uml.be.dto.response.PagedResponse;
 import su26.uml.be.dto.response.ProjectResponse;
+import su26.uml.be.dto.response.ProjectStatsResponse;
 import su26.uml.be.service.adminDashboard.ActivityTrackerService;
 import su26.uml.be.service.ProjectService;
 
-import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -50,22 +55,59 @@ public class ProjectController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
-    @Operation(summary = "Get all projects", description = "Returns all projects belonging to the authenticated user.")
+    @Operation(summary = "Get all projects (paginated)",
+            description = "Paginated list of projects belonging to the authenticated user. " +
+                    "Params: page (0-based), size, sort (e.g. sort=updatedAt,desc), optional isDraft filter. " +
+                    "Defaults: page=0, size=20, sort=updatedAt,desc.")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(
             responseCode = "200", description = "Project list returned.",
             content = @Content(schema = @Schema(implementation = ApiResponse.class),
                     examples = @ExampleObject(value = SwaggerExamples.PROJECT_LIST_RESPONSE)))
-    public ApiResponse<List<ProjectResponse>> getAllProjects(
+    public ApiResponse<PagedResponse<ProjectResponse>> getAllProjects(
             @AuthenticationPrincipal UserDetails userDetails,
-            @RequestParam(required = false) Boolean isDraft) {
-        return projectService.getAllUserProjects(userDetails.getUsername(), isDraft);
+            @RequestParam(required = false) Boolean isDraft,
+            @PageableDefault(size = 20, sort = "updatedAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return projectService.getAllUserProjects(userDetails.getUsername(), isDraft, pageable);
     }
 
     @GetMapping("/admin/all")
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Get all projects for Admin", description = "Returns all projects in the system. Restricted to ADMIN.")
-    public ApiResponse<List<ProjectResponse>> getAllProjectsForAdmin() {
-        return projectService.getAllProjectsForAdmin();
+    @Operation(summary = "Get all projects for Admin (paginated)",
+            description = "Paginated list of all projects in the system. Restricted to ADMIN. " +
+                    "Defaults: page=0, size=20, sort=createdAt,desc.")
+    public ApiResponse<PagedResponse<ProjectResponse>> getAllProjectsForAdmin(
+            @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return projectService.getAllProjectsForAdmin(pageable);
+    }
+
+    @GetMapping("/admin/stats")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Admin project stats",
+            description = "Đếm trên toàn bảng (Tổng / Đúng tiến độ / Bản nháp), độc lập với phân trang.")
+    public ApiResponse<ProjectStatsResponse> getAdminProjectStats() {
+        return projectService.getAdminProjectStats();
+    }
+
+    @GetMapping("/admin/owners")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Admin project owners (paginated, tầng ngoài)",
+            description = "Danh sách chủ sở hữu kèm số dự án của mỗi người, sắp xếp theo số dự án giảm dần. " +
+                    "Defaults: page=0, size=10.")
+    public ApiResponse<PagedResponse<OwnerGroupResponse>> getAdminProjectOwners(
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return projectService.getAdminProjectOwners(page, size);
+    }
+
+    @GetMapping("/admin/by-owner/{ownerId}")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Admin projects by owner (paginated, tầng trong)",
+            description = "Dự án của một chủ sở hữu, sắp xếp updatedAt desc. Defaults: page=0, size=5.")
+    public ApiResponse<PagedResponse<ProjectResponse>> getAdminProjectsByOwner(
+            @PathVariable UUID ownerId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "5") int size) {
+        return projectService.getAdminProjectsByOwner(ownerId, page, size);
     }
 
     @GetMapping("/{projectId}")

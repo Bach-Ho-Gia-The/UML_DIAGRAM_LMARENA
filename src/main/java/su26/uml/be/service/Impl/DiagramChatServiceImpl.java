@@ -12,6 +12,7 @@ import com.knuddels.jtokkit.api.ModelType;
 import dev.langchain4j.model.output.TokenUsage;
 import dev.langchain4j.service.Result;
 import dev.ai4j.openai4j.OpenAiHttpException;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -27,6 +28,7 @@ import su26.uml.be.dto.response.ApiResponse;
 import su26.uml.be.dto.response.ChatSessionResponse;
 import su26.uml.be.dto.response.DiagramChatHistoryResponse;
 import su26.uml.be.dto.response.DiagramChatResponse;
+import su26.uml.be.dto.response.PagedResponse;
 import su26.uml.be.entity.AiChatMessageDocument;
 import su26.uml.be.entity.AiChatSessionDocument;
 import su26.uml.be.entity.AiSourceDocument;
@@ -360,20 +362,20 @@ public class DiagramChatServiceImpl implements DiagramChatService {
     }
 
     @Override
-    public ApiResponse<List<ChatSessionResponse>> getSessions(String email) {
+    public ApiResponse<PagedResponse<ChatSessionResponse>> getSessions(String email, Pageable pageable) {
         User user = getCurrentUser(email);
         String userId = user.getId().toString();
 
-        List<ChatSessionResponse> response = chatSessionRepository.findByUserIdOrderByUpdatedAtDesc(userId)
-                .stream()
-                .map(this::mapSessionResponse)
-                .toList();
+        PagedResponse<ChatSessionResponse> response = PagedResponse.from(
+                chatSessionRepository.findByUserIdOrderByUpdatedAtDesc(userId, pageable)
+                        .map(this::mapSessionResponse));
 
         return ApiResponse.success("Get chat sessions successfully", response);
     }
 
     @Override
-    public ApiResponse<DiagramChatHistoryResponse> getHistory(String email, String sessionId) {
+    public ApiResponse<PagedResponse<DiagramChatHistoryResponse.MessageItem>> getHistory(
+            String email, String sessionId, Pageable pageable) {
         User user = getCurrentUser(email);
         String userId = user.getId().toString();
 
@@ -385,28 +387,9 @@ public class DiagramChatServiceImpl implements DiagramChatService {
                 .findByAnythingSessionIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_SESSION_NOT_FOUND));
 
-        List<AiChatMessageDocument> messages =
-                chatMessageRepository.findByChatSessionIdOrderByCreatedAtAsc(session.getId());
-
-        DiagramChatHistoryResponse response = DiagramChatHistoryResponse.builder()
-                .sessionId(session.getAnythingSessionId())
-                .messages(messages.stream()
-                        .map(message -> {
-                            DiagramChatResponse parsed = parseAiResponse(message.getContent());
-                            return DiagramChatHistoryResponse.MessageItem.builder()
-                                    .role(message.getRole())
-                                    .content(message.getContent())
-                                    .kind(parsed.getKind())
-                                    .summary(parsed.getSummary())
-                                    .nodes(parsed.getNodes())
-                                    .edges(parsed.getEdges())
-                                    .questions(parsed.getQuestions())
-                                    .modelName(message.getModelName())
-                                    .createdAt(message.getCreatedAt())
-                                    .build();
-                        })
-                        .toList())
-                .build();
+        PagedResponse<DiagramChatHistoryResponse.MessageItem> response = PagedResponse.from(
+                chatMessageRepository.findByChatSessionIdOrderByCreatedAtAsc(session.getId(), pageable)
+                        .map(this::mapMessageItem));
 
         return ApiResponse.success("Get chat history successfully", response);
     }
@@ -477,6 +460,21 @@ public class DiagramChatServiceImpl implements DiagramChatService {
                 .status(session.getStatus())
                 .createdAt(session.getCreatedAt())
                 .updatedAt(session.getUpdatedAt())
+                .build();
+    }
+
+    private DiagramChatHistoryResponse.MessageItem mapMessageItem(AiChatMessageDocument message) {
+        DiagramChatResponse parsed = parseAiResponse(message.getContent());
+        return DiagramChatHistoryResponse.MessageItem.builder()
+                .role(message.getRole())
+                .content(message.getContent())
+                .kind(parsed.getKind())
+                .summary(parsed.getSummary())
+                .nodes(parsed.getNodes())
+                .edges(parsed.getEdges())
+                .questions(parsed.getQuestions())
+                .modelName(message.getModelName())
+                .createdAt(message.getCreatedAt())
                 .build();
     }
 

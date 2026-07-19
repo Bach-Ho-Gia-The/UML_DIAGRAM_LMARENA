@@ -1,12 +1,15 @@
 package su26.uml.be.repository;
 
 import jakarta.persistence.LockModeType;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import su26.uml.be.dto.response.OwnerGroupResponse;
 import su26.uml.be.entity.Project;
 import su26.uml.be.entity.User;
 
@@ -45,5 +48,33 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
     @EntityGraph(attributePaths = {"sheets"})
     List<Project> findAllByIsDeletedFalseAndIsDraftTrue();
 
+    // Biến thể phân trang — KHÔNG dùng @EntityGraph(sheets) vì fetch collection kèm Pageable
+    // khiến Hibernate phân trang trong bộ nhớ (HHH000104); diagramCount lazy-load trong tx read-only.
+    Page<Project> findAllByUserAndIsDeletedFalse(User user, Pageable pageable);
+    Page<Project> findAllByUserAndIsDeletedFalseAndIsDraftFalse(User user, Pageable pageable);
+    Page<Project> findAllByUserAndIsDeletedFalseAndIsDraftTrue(User user, Pageable pageable);
+    Page<Project> findAllByIsDeletedFalseAndIsDraftFalse(Pageable pageable);
+
     long countByCreatedAtBetweenAndIsDeletedFalse(LocalDateTime from, LocalDateTime to);
+
+    // ─── Admin Projects: 3 nguồn dữ liệu độc lập (stats / owners / by-owner) ────────
+
+    // Stats toàn bảng — độc lập phân trang
+    long countByIsDeletedFalse();
+    long countByIsDeletedFalseAndIsDraftTrue();
+    long countByIsDeletedFalseAndIsDraftFalse();
+
+    // Phân trang TẦNG NGOÀI: mỗi owner + số project của họ. GROUP BY nên phải khai báo countQuery
+    // riêng (Spring Data không tự suy ra count cho query GROUP BY) = COUNT(DISTINCT owner).
+    // KHÔNG truyền Sort qua Pageable (ORDER BY đã cố định trong query) để tránh xung đột.
+    @Query(value = "select new su26.uml.be.dto.response.OwnerGroupResponse("
+            + "p.user.id, p.user.fullName, p.user.email, count(p)) "
+            + "from Project p where p.isDeleted = false "
+            + "group by p.user.id, p.user.fullName, p.user.email "
+            + "order by count(p) desc",
+            countQuery = "select count(distinct p.user.id) from Project p where p.isDeleted = false")
+    Page<OwnerGroupResponse> findOwnerGroups(Pageable pageable);
+
+    // Phân trang TẦNG TRONG: project của riêng một owner
+    Page<Project> findAllByUser_IdAndIsDeletedFalse(UUID ownerId, Pageable pageable);
 }

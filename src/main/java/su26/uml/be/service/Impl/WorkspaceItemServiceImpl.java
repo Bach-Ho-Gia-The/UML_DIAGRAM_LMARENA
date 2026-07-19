@@ -25,6 +25,7 @@ import su26.uml.be.exception.AppException;
 import su26.uml.be.exception.ErrorCode;
 import su26.uml.be.mapper.SheetMapper;
 import su26.uml.be.mapper.WorkspaceItemMapper;
+import su26.uml.be.repository.DiagramVersionRepository;
 import su26.uml.be.repository.ProjectRepository;
 import su26.uml.be.repository.SheetRepository;
 import su26.uml.be.repository.WorkspaceItemRepository;
@@ -51,6 +52,7 @@ public class WorkspaceItemServiceImpl implements WorkspaceItemService {
     WorkspaceItemRepository workspaceItemRepository;
     ProjectRepository projectRepository;
     SheetRepository sheetRepository;
+    DiagramVersionRepository diagramVersionRepository;
     WorkspaceItemMapper workspaceItemMapper;
     SheetMapper sheetMapper;
     ProjectAccessService projectAccessService;
@@ -267,6 +269,10 @@ public class WorkspaceItemServiceImpl implements WorkspaceItemService {
 
         workspaceItemRepository.deleteAll(ordered);
         workspaceItemRepository.flush();
+        // Xóa lịch sử version trước (FK diagram_versions.sheet_id NOT NULL, không cascade) rồi mới xóa sheet
+        if (!sheetsToDelete.isEmpty()) {
+            diagramVersionRepository.deleteAllBySheetIn(sheetsToDelete);
+        }
         sheetRepository.deleteAll(sheetsToDelete);
 
         // Dồn lại orderIndex tại các folder bị mất con
