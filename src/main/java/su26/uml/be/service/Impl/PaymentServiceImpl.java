@@ -202,6 +202,52 @@ public class PaymentServiceImpl implements PaymentService {
         PaymentTransaction transaction = paymentTransactionRepository.findByOrderCode(orderCode)
                 .orElseThrow(() -> new AppException(ErrorCode.TRANSACTION_NOT_FOUND));
 
+        if (transaction.getStatus() == PaymentStatus.PENDING) {
+            try {
+                vn.payos.model.v2.paymentRequests.PaymentLinkData linkData = payOS.paymentRequests().getPaymentLinkInformation(orderCode);
+                if ("PAID".equals(linkData.getStatus())) {
+                    transaction.setStatus(PaymentStatus.PAID);
+                    paymentTransactionRepository.save(transaction);
+        
+                    User user = transaction.getUser();
+                    Plan plan = transaction.getPlan();
+        
+                    LocalDateTime now = LocalDateTime.now();
+                    LocalDateTime startDate = now;
+                    
+                    Subscription currentSub = user.getCurrentSubscription();
+                    if (currentSub != null && currentSub.getEndDate() != null && currentSub.getEndDate().isAfter(now)) {
+                        startDate = currentSub.getEndDate();
+                        currentSub.setStatus(SubscriptionStatus.EXPIRED);
+                        subscriptionRepository.save(currentSub);
+                    }
+                    
+                    LocalDateTime endDate = startDate.plusDays(plan.getDurationDays() != null ? plan.getDurationDays() : 30);
+        
+                    Subscription subscription = Subscription.builder()
+                            .user(user)
+                            .plan(plan)
+                            .status(SubscriptionStatus.ACTIVE)
+                            .startDate(startDate)
+                            .endDate(endDate)
+                            .build();
+        
+                    subscriptionRepository.save(subscription);
+        
+                    user.setCurrentSubscription(subscription);
+                    userRepository.save(user);
+        
+                    quotaService.resetOnPlanChange(user.getId());
+                    log.info("Successfully synced and granted plan {} to user {}", plan.getName(), user.getUsername());
+                } else if ("CANCELLED".equals(linkData.getStatus())) {
+                    transaction.setStatus(PaymentStatus.CANCELLED);
+                    paymentTransactionRepository.save(transaction);
+                }
+            } catch (Exception e) {
+                log.error("Failed to fetch payment status from PayOS for orderCode: " + orderCode, e);
+            }
+        }
+
         return PaymentStatusResponse.builder()
                 .orderCode(transaction.getOrderCode())
                 .status(transaction.getStatus().name())
