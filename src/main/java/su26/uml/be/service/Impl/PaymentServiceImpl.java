@@ -204,8 +204,8 @@ public class PaymentServiceImpl implements PaymentService {
 
         if (transaction.getStatus() == PaymentStatus.PENDING) {
             try {
-                vn.payos.model.v2.paymentRequests.PaymentLinkData linkData = payOS.paymentRequests().getPaymentLinkInformation(orderCode);
-                if ("PAID".equals(linkData.getStatus())) {
+                vn.payos.model.v2.paymentRequests.PaymentLink linkData = payOS.paymentRequests().get(orderCode);
+                if (vn.payos.model.v2.paymentRequests.PaymentLinkStatus.PAID.equals(linkData.getStatus())) {
                     transaction.setStatus(PaymentStatus.PAID);
                     paymentTransactionRepository.save(transaction);
         
@@ -239,7 +239,7 @@ public class PaymentServiceImpl implements PaymentService {
         
                     quotaService.resetOnPlanChange(user.getId());
                     log.info("Successfully synced and granted plan {} to user {}", plan.getName(), user.getUsername());
-                } else if ("CANCELLED".equals(linkData.getStatus())) {
+                } else if (vn.payos.model.v2.paymentRequests.PaymentLinkStatus.CANCELLED.equals(linkData.getStatus())) {
                     transaction.setStatus(PaymentStatus.CANCELLED);
                     paymentTransactionRepository.save(transaction);
                 }
