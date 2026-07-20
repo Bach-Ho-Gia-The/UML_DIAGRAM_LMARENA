@@ -9,10 +9,6 @@ import com.knuddels.jtokkit.Encodings;
 import com.knuddels.jtokkit.api.Encoding;
 import com.knuddels.jtokkit.api.EncodingRegistry;
 import com.knuddels.jtokkit.api.ModelType;
-import dev.langchain4j.model.output.TokenUsage;
-import dev.langchain4j.service.Result;
-import dev.ai4j.openai4j.OpenAiHttpException;
-import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -22,13 +18,14 @@ import java.util.regex.Pattern;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import su26.uml.be.config.anythingllm.AnythingLlmClient;
 import su26.uml.be.dto.request.DiagramChatRequest;
 import su26.uml.be.dto.response.AiResponseKind;
 import su26.uml.be.dto.response.ApiResponse;
+import su26.uml.be.dto.response.AnythingLlmChatResponse;
 import su26.uml.be.dto.response.ChatSessionResponse;
 import su26.uml.be.dto.response.DiagramChatHistoryResponse;
 import su26.uml.be.dto.response.DiagramChatResponse;
-import su26.uml.be.dto.response.PagedResponse;
 import su26.uml.be.entity.AiChatMessageDocument;
 import su26.uml.be.entity.AiChatSessionDocument;
 import su26.uml.be.entity.AiSourceDocument;
@@ -45,7 +42,6 @@ import su26.uml.be.service.DiagramChatService;
 import su26.uml.be.service.QuotaService;
 import su26.uml.be.service.RateLimiterService;
 import su26.uml.be.service.adminDashboard.AiGenerationLogService;
-import su26.uml.be.service.ai.UmlArchitect;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 @Service
@@ -65,7 +61,7 @@ public class DiagramChatServiceImpl implements DiagramChatService {
     private final AiChatMessageRepository chatMessageRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
-    private final UmlArchitect umlArchitect;
+    private final AnythingLlmClient anythingLlmClient;
     private final AiGenerationLogService aiGenerationLogService;
     private final SystemConfigCacheService systemConfigCacheService;
     private final ActivityTrackerService activityTracker;
@@ -98,30 +94,30 @@ public class DiagramChatServiceImpl implements DiagramChatService {
 
             // Xây dựng prompt với context được định dạng dễ đọc cho AI
             StringBuilder promptBuilder = new StringBuilder();
-            
+
             if (request.getCurrentNodes() != null && !request.getCurrentNodes().isEmpty()) {
                 promptBuilder.append("--- CANVAS CONTEXT (SHORTHAND) ---\n");
                 for (var n : request.getCurrentNodes()) {
                     promptBuilder.append(String.format("%s:%s(%s)", n.getId(), n.getType(), n.getLabel()));
                     if (n.getStereotype() != null) promptBuilder.append("<<").append(n.getStereotype()).append(">>");
-                    
+
                     List<String> details = new ArrayList<>();
-                    if (n.getAttributes() != null && !n.getAttributes().isEmpty()) 
+                    if (n.getAttributes() != null && !n.getAttributes().isEmpty())
                         details.add("a:[" + String.join(",", n.getAttributes()) + "]");
-                    if (n.getMethods() != null && !n.getMethods().isEmpty()) 
+                    if (n.getMethods() != null && !n.getMethods().isEmpty())
                         details.add("m:[" + String.join(",", n.getMethods()) + "]");
-                    
+
                     if (!details.isEmpty()) {
                         promptBuilder.append("{").append(String.join(",", details)).append("}");
                     }
                     promptBuilder.append("\n");
                 }
-                
+
                 if (request.getCurrentEdges() != null && !request.getCurrentEdges().isEmpty()) {
                     promptBuilder.append("Edges: ");
                     for (var e : request.getCurrentEdges()) {
-                        promptBuilder.append(String.format("[%s:%s->%s(%s)] ", 
-                            e.getId(), e.getSource(), e.getTarget(), e.getRelation()));
+                        promptBuilder.append(String.format("[%s:%s->%s(%s)] ",
+                                e.getId(), e.getSource(), e.getTarget(), e.getRelation()));
                     }
                     promptBuilder.append("\n");
                 }
@@ -140,7 +136,7 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             // Gọi AI với cơ chế Error Reflection + token extraction
             AiChatResult result;
             try {
-                result = callAiWithRetry(promptBuilder.toString(), MAX_RETRIES);
+                result = callAiWithRetry(promptBuilder.toString(), session.getAnythingSessionId(), MAX_RETRIES);
             } catch (AppException e) {
                 logAiError(session.getAnythingSessionId(), userId, request.getMessage(), e.getMessage(), provider, modelName);
                 throw e;
@@ -204,37 +200,40 @@ public class DiagramChatServiceImpl implements DiagramChatService {
                 .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
 
-    private AiChatResult callAiWithRetry(String userPrompt, int maxRetries) {
+    private AiChatResult callAiWithRetry(String userPrompt, String anythingSessionId, int maxRetries) {
         String currentPrompt = userPrompt;
         Exception lastException = null;
 
         for (int i = 0; i < maxRetries; i++) {
             try {
                 long startTime = System.currentTimeMillis();
-                Result<String> rawResponse = umlArchitect.chat(currentPrompt);
+                AnythingLlmChatResponse rawResponse = anythingLlmClient.chat(currentPrompt, anythingSessionId);
                 long latencyMs = System.currentTimeMillis() - startTime;
 
-                String rawJson = rawResponse.content();
+                if (rawResponse == null || rawResponse.getError() != null) {
+                    throw new RuntimeException("AnythingLLM error: " + (rawResponse != null ? rawResponse.getError() : "null response"));
+                }
+
+                String rawJson = rawResponse.getTextResponse();
                 DiagramChatResponse parsed = parseAndValidateAiResponse(rawJson);
                 if (parsed == null) {
                     throw new RuntimeException("AI returned invalid/empty response");
                 }
 
-                return new AiChatResult(parsed, rawResponse, latencyMs);
-
-            } catch (OpenAiHttpException e) {
-                log.error("AI Chat upstream error (attempt {}): status={}, body={}", i + 1, e.code(), e.getMessage());
-                String detail = "[" + e.code() + "] " + e.getMessage();
-                if (e.code() == 401) {
-                    throw new AppException(ErrorCode.AI_PROVIDER_AUTH_FAILED, detail);
-                }
-                if (e.getMessage() != null) {
-                    String msg = e.getMessage().toLowerCase();
-                    if (msg.contains("embed") || msg.contains("ollama") || msg.contains("connection refused")) {
-                        throw new AppException(ErrorCode.AI_OLLAMA_EMBEDDING_FAILED, detail);
+                // Map sources from RAG
+                List<AiSourceDocument> sources = new ArrayList<>();
+                if (rawResponse.getSources() != null) {
+                    for (var src : rawResponse.getSources()) {
+                        sources.add(AiSourceDocument.builder()
+                                .title((String) src.get("title"))
+                                .snippet((String) src.get("text"))
+                                .url((String) src.get("url"))
+                                .build());
                     }
                 }
-                throw new AppException(ErrorCode.AI_PROVIDER_UPSTREAM_ERROR, detail);
+                parsed.setSources(sources);
+
+                return new AiChatResult(parsed, rawResponse, latencyMs);
 
             } catch (Exception e) {
                 log.warn("AI Chat retry {}/{} due to error: {}", i + 1, maxRetries, e.getMessage());
@@ -250,10 +249,10 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         throw new RuntimeException(lastException != null ? lastException.getMessage() : "AI chat failed");
     }
 
-    private record AiChatResult(DiagramChatResponse diagramResponse, Result<String> response, long latencyMs) {}
+    private record AiChatResult(DiagramChatResponse diagramResponse, AnythingLlmChatResponse response, long latencyMs) {}
 
     private void logAiError(String sessionId, String userId, String userMessage,
-                             String errorMessage, String provider, String modelName) {
+                            String errorMessage, String provider, String modelName) {
         int inputTokens = estimateTokens(userMessage);
         aiGenerationLogService.log(sessionId, userId, inputTokens, 0,
                 EstimationMethod.JTOKKIT, 0, false, errorMessage,
@@ -261,22 +260,11 @@ public class DiagramChatServiceImpl implements DiagramChatService {
     }
 
     private void logAiGeneration(AiChatResult result, String userId, String sessionId,
-                                   String userMessage, String assistantMessage,
-                                   String provider, String modelName) {
-        TokenUsage usage = result.response().tokenUsage();
-        int inputTokens;
-        int outputTokens;
-        EstimationMethod method;
-
-        if (usage != null) {
-            inputTokens = usage.inputTokenCount();
-            outputTokens = usage.outputTokenCount();
-            method = EstimationMethod.PROVIDER;
-        } else {
-            inputTokens = estimateTokens(userMessage);
-            outputTokens = estimateTokens(assistantMessage);
-            method = EstimationMethod.JTOKKIT;
-        }
+                                 String userMessage, String assistantMessage,
+                                 String provider, String modelName) {
+        int inputTokens = estimateTokens(userMessage);
+        int outputTokens = estimateTokens(assistantMessage);
+        EstimationMethod method = EstimationMethod.JTOKKIT;
 
         aiGenerationLogService.log(
                 sessionId, userId,
@@ -306,7 +294,20 @@ public class DiagramChatServiceImpl implements DiagramChatService {
         String cleanJson = rawResponse.replaceAll("(?s)<think>.*?</think>", "").trim();
 
         // 2. Chuẩn hóa dấu ngoặc kép (xử lý trường hợp AI nhả ra dấu ngoặc kép thông minh/curly quotes)
-        cleanJson = cleanJson.replace("“", "\"").replace("”", "\"").replace("‘", "'").replace("’", "'");
+        //    Mở rộng từ 4 ký tự gốc sang đầy đủ các loại quote unicode phổ biến để giảm parse-fail do quote lạ.
+        cleanJson = cleanJson
+                .replace("“", "\"")
+                .replace("”", "\"")
+                .replace("‘", "'")
+                .replace("’", "'")
+                // Guillemets (Pháp/Nga/Đức…)
+                .replace("«", "\"")
+                .replace("»", "\"")
+                .replace("‹", "'")
+                .replace("›", "'")
+                // Low/high double quotes (German style)
+                .replace("„", "\"")
+                .replace("‚", "'");
 
         // 3. Trích xuất JSON từ Markdown code blocks (nếu có)
         Pattern pattern = Pattern.compile("(?s)```(?:json)?\\s*(.*?)\\s*```");
@@ -336,16 +337,124 @@ public class DiagramChatServiceImpl implements DiagramChatService {
             }
         }
 
-        // 5. Xử lý trường hợp AI nhả ra mảng [ { ... } ]
-        if (cleanJson.startsWith("[")) {
-            List<DiagramChatResponse> list = objectMapper.readValue(cleanJson, new TypeReference<List<DiagramChatResponse>>() {});
-            if (list != null && !list.isEmpty()) {
-                return list.get(0);
+        // Thử parse JSON, nếu không phải JSON (text thường / lời từ chối / chit-chat), fallback về REPLY
+        try {
+            if (cleanJson.startsWith("[")) {
+                // E-03: nếu AI trả [a, b, c], ưu tiên lấy phần tử DIAGRAM (state cuối cùng);
+                // nếu không có diagram thì lấy phần tử đầu. Tuyệt đối KHÔNG lấy đại phần tử 0 vì có thể
+                // là reply/questions phụ đi kèm → mất state thật.
+                List<DiagramChatResponse> list = objectMapper.readValue(cleanJson, new TypeReference<List<DiagramChatResponse>>() {});
+                if (list != null && !list.isEmpty()) {
+                    DiagramChatResponse chosen = list.stream()
+                            .filter(r -> r != null && r.getKind() == AiResponseKind.DIAGRAM)
+                            .findFirst()
+                            .orElse(list.get(0));
+                    validateAiResponse(chosen);
+                    return chosen;
+                }
+            }
+            DiagramChatResponse res = objectMapper.readValue(cleanJson, DiagramChatResponse.class);
+            validateAiResponse(res);
+            return res;
+        } catch (Exception e) {
+            // E-05: trước đây fallback REPLY giữ nguyên rawResponse (kể cả khi raw là JSON lỗi) →
+            // user thấy JSON rỗng rỗng trong khung chat. Giờ trả message thân thiện để user hiểu
+            // và mô tả lại.
+            log.warn("AI returned non-JSON response or invalid JSON. Falling back to REPLY. Raw: {}", rawResponse);
+            String friendly = "AI đã trả về kết quả không đúng định dạng JSON. "
+                    + "Bro thử mô tả lại yêu cầu bằng câu ngắn gọn hơn giúp tôi nhé.";
+            return DiagramChatResponse.builder()
+                    .kind(AiResponseKind.REPLY)
+                    .answer(friendly)
+                    .build();
+        }
+    }
+
+    private void validateAiResponse(DiagramChatResponse response) {
+        if (response == null) {
+            throw new RuntimeException("AI returned null response object");
+        }
+        if (response.getKind() == null) {
+            throw new RuntimeException("AI response missing 'kind' field (must be 'reply', 'diagram', or 'questions')");
+        }
+        if (response.getKind() == AiResponseKind.DIAGRAM) {
+            if (response.getDiagramType() != null && !response.getDiagramType().isBlank()) {
+                String dt = response.getDiagramType().toLowerCase();
+                java.util.Set<String> validDiagramTypes = java.util.Set.of("class", "usecase", "activity", "component", "state");
+                if (!validDiagramTypes.contains(dt)) {
+                    throw new RuntimeException("Invalid diagramType: '" + response.getDiagramType() + "'. Allowed: " + validDiagramTypes);
+                }
+            }
+            if (response.getNodes() != null) {
+                java.util.Set<String> validNodeTypes = java.util.Set.of("action", "decision", "start", "final", "fork", "cls", "class", "component", "usecase", "actor", "note", "package");
+                for (var node : response.getNodes()) {
+                    if (node.getType() == null || !validNodeTypes.contains(node.getType().toLowerCase())) {
+                        throw new RuntimeException("Invalid node type: '" + (node != null ? node.getType() : "null") + "'. Allowed: " + validNodeTypes);
+                    }
+                    // Auto-alias: AI đôi khi trả "class" thay vì "cls" (vì prompt
+                    // cũng dùng chữ "class" trong diagramType). Map về "cls" để
+                    // FE render đúng component.
+                    if ("class".equalsIgnoreCase(node.getType())) {
+                        node.setType("cls");
+                    }
+                }
+
+                // E-01 (nâng cấp): parentId hợp lệ
+                // - Nếu node khai báo parentId != null, BẮT BUỘC phải có 1 node khác
+                //   trong cùng response có id == parentId. Nếu không → throw để retry.
+                // - Actor tuyệt đối KHÔNG được có parentId (system prompt yêu cầu actor ngoài package).
+                java.util.Set<String> nodeIds = response.getNodes().stream()
+                        .map(su26.uml.be.dto.response.AiNodeDto::getId)
+                        .filter(java.util.Objects::nonNull)
+                        .collect(java.util.stream.Collectors.toSet());
+                for (var node : response.getNodes()) {
+                    if (node == null) continue;
+                    String parentId = node.getParentId();
+                    if (parentId != null && !parentId.isBlank()) {
+                        if (!nodeIds.contains(parentId)) {
+                            throw new RuntimeException("Node '" + node.getId() + "' has parentId='" + parentId
+                                    + "' but no node with that id exists in the response. "
+                                    + "Make sure the parent node is included in the nodes array.");
+                        }
+                    }
+                    if ("actor".equalsIgnoreCase(node.getType()) && parentId != null && !parentId.isBlank()) {
+                        throw new RuntimeException("Node '" + node.getId() + "' is type 'actor' but has parentId='"
+                                + parentId + "'. Actors must stay outside any package (parentId must be null).");
+                    }
+                }
+            }
+            if (response.getEdges() != null) {
+                java.util.Set<String> validRelations = java.util.Set.of("inheritance", "realization", "association", "aggregation", "composition", "dependency", "include", "extend", "control-flow", "transition", "note-link", "self-transition");
+                for (var edge : response.getEdges()) {
+                    if (edge.getRelation() == null || !validRelations.contains(edge.getRelation().toLowerCase())) {
+                        throw new RuntimeException("Invalid edge relation: '" + (edge != null ? edge.getRelation() : "null") + "'. Allowed: " + validRelations);
+                    }
+                }
             }
         }
 
-        // 4. Parse JSON Object thông thường
-        return objectMapper.readValue(cleanJson, DiagramChatResponse.class);
+        // Validate QUESTIONS mode: option bắt buộc cho single/multiple.
+        // Thay đổi rule mới: ép AI luôn đưa options khi mode = single/multiple,
+        // chỉ mode = "text" mới được phép options null/empty.
+        if (response.getKind() == AiResponseKind.QUESTIONS && response.getQuestions() != null) {
+            java.util.Set<String> validQuestionModes = java.util.Set.of("single", "multiple", "text");
+            for (var q : response.getQuestions()) {
+                if (q == null) continue;
+                String qMode = q.getMode() == null ? "" : q.getMode().toLowerCase();
+                if (!validQuestionModes.contains(qMode)) {
+                    throw new RuntimeException("Invalid question mode: '" + q.getMode() + "'. Allowed: " + validQuestionModes);
+                }
+                // single/multiple: bắt buộc có options với >= 2 item
+                if ("single".equals(qMode) || "multiple".equals(qMode)) {
+                    if (q.getOptions() == null || q.getOptions().size() < 2) {
+                        throw new RuntimeException("Question '" + q.getId() + "' has mode='" + q.getMode()
+                                + "' but options is null or has < 2 items. "
+                                + "For single/multiple mode, you MUST provide at least 2 options. "
+                                + "If a free-form answer is needed, use mode='text' instead.");
+                    }
+                }
+            }
+        }
     }
 
     @Override
@@ -362,20 +471,20 @@ public class DiagramChatServiceImpl implements DiagramChatService {
     }
 
     @Override
-    public ApiResponse<PagedResponse<ChatSessionResponse>> getSessions(String email, Pageable pageable) {
+    public ApiResponse<List<ChatSessionResponse>> getSessions(String email) {
         User user = getCurrentUser(email);
         String userId = user.getId().toString();
 
-        PagedResponse<ChatSessionResponse> response = PagedResponse.from(
-                chatSessionRepository.findByUserIdOrderByUpdatedAtDesc(userId, pageable)
-                        .map(this::mapSessionResponse));
+        List<ChatSessionResponse> response = chatSessionRepository.findByUserIdOrderByUpdatedAtDesc(userId)
+                .stream()
+                .map(this::mapSessionResponse)
+                .toList();
 
         return ApiResponse.success("Get chat sessions successfully", response);
     }
 
     @Override
-    public ApiResponse<PagedResponse<DiagramChatHistoryResponse.MessageItem>> getHistory(
-            String email, String sessionId, Pageable pageable) {
+    public ApiResponse<DiagramChatHistoryResponse> getHistory(String email, String sessionId) {
         User user = getCurrentUser(email);
         String userId = user.getId().toString();
 
@@ -387,9 +496,28 @@ public class DiagramChatServiceImpl implements DiagramChatService {
                 .findByAnythingSessionIdAndUserId(sessionId, userId)
                 .orElseThrow(() -> new AppException(ErrorCode.CHAT_SESSION_NOT_FOUND));
 
-        PagedResponse<DiagramChatHistoryResponse.MessageItem> response = PagedResponse.from(
-                chatMessageRepository.findByChatSessionIdOrderByCreatedAtAsc(session.getId(), pageable)
-                        .map(this::mapMessageItem));
+        List<AiChatMessageDocument> messages =
+                chatMessageRepository.findByChatSessionIdOrderByCreatedAtAsc(session.getId());
+
+        DiagramChatHistoryResponse response = DiagramChatHistoryResponse.builder()
+                .sessionId(session.getAnythingSessionId())
+                .messages(messages.stream()
+                        .map(message -> {
+                            DiagramChatResponse parsed = parseAiResponse(message.getContent());
+                            return DiagramChatHistoryResponse.MessageItem.builder()
+                                    .role(message.getRole())
+                                    .content(message.getContent())
+                                    .kind(parsed.getKind())
+                                    .summary(parsed.getSummary())
+                                    .nodes(parsed.getNodes())
+                                    .edges(parsed.getEdges())
+                                    .questions(parsed.getQuestions())
+                                    .modelName(message.getModelName())
+                                    .createdAt(message.getCreatedAt())
+                                    .build();
+                        })
+                        .toList())
+                .build();
 
         return ApiResponse.success("Get chat history successfully", response);
     }
@@ -460,21 +588,6 @@ public class DiagramChatServiceImpl implements DiagramChatService {
                 .status(session.getStatus())
                 .createdAt(session.getCreatedAt())
                 .updatedAt(session.getUpdatedAt())
-                .build();
-    }
-
-    private DiagramChatHistoryResponse.MessageItem mapMessageItem(AiChatMessageDocument message) {
-        DiagramChatResponse parsed = parseAiResponse(message.getContent());
-        return DiagramChatHistoryResponse.MessageItem.builder()
-                .role(message.getRole())
-                .content(message.getContent())
-                .kind(parsed.getKind())
-                .summary(parsed.getSummary())
-                .nodes(parsed.getNodes())
-                .edges(parsed.getEdges())
-                .questions(parsed.getQuestions())
-                .modelName(message.getModelName())
-                .createdAt(message.getCreatedAt())
                 .build();
     }
 

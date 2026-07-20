@@ -2,6 +2,7 @@ package su26.uml.be.dto.response;
 
 import java.util.List;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import lombok.AccessLevel;
@@ -22,8 +23,11 @@ public class DiagramChatResponse {
 
     AiResponseKind kind;
 
+    String diagramType;
+
     String summary;
 
+    @JsonAlias({"text", "message", "content", "response"})
     String answer;
 
     String sessionId;

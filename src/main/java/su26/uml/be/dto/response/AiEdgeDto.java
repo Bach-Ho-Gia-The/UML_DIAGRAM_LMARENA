@@ -18,4 +18,6 @@ public class AiEdgeDto {
     String target;
     String relation;
     String label;
+    String multiplicitySource;
+    String multiplicityTarget;
 }

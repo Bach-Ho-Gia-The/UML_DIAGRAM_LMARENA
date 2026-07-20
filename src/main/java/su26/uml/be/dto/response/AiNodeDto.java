@@ -21,4 +21,5 @@ public class AiNodeDto {
     String stereotype;
     List<String> attributes;
     List<String> methods;
+    String parentId;
 }
