@@ -37,7 +37,7 @@ public class PaymentController {
         }
         User user = userRepository.findByEmail(userDetails.getUsername())
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-        PaymentResponse response = paymentService.createPaymentLink(user, request.getPlanId());
+        PaymentResponse response = paymentService.createPaymentLink(user, request.getPlanId(), request.getReturnUrl(), request.getCancelUrl());
         return ResponseEntity.ok(ApiResponse.success("Tạo link thanh toán thành công", response));
     }
 

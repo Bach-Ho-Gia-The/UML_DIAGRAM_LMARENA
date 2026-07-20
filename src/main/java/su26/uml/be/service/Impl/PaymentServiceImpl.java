@@ -60,7 +60,7 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
-    public PaymentResponse createPaymentLink(User user, UUID planId) {
+    public PaymentResponse createPaymentLink(User user, UUID planId, String returnUrl, String cancelUrl) {
         Plan plan = planRepository.findById(planId)
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_NOT_FOUND));
 
@@ -83,8 +83,14 @@ public class PaymentServiceImpl implements PaymentService {
         paymentTransactionRepository.save(transaction);
 
         try {
-            String returnUrl = frontendUrl + "/payment/success";
-            String cancelUrl = frontendUrl + "/payment/cancel";
+            // Sử dụng returnUrl và cancelUrl truyền từ request, hoặc lấy default nếu không có
+            String finalReturnUrl = (returnUrl != null && !returnUrl.trim().isEmpty()) 
+                    ? returnUrl 
+                    : frontendUrl + "/";
+                    
+            String finalCancelUrl = (cancelUrl != null && !cancelUrl.trim().isEmpty()) 
+                    ? cancelUrl 
+                    : frontendUrl + "/";
 
             // PayOS chỉ chấp nhận ASCII thuần túy, tối đa 25 ký tự
             String rawDescription = "Thanh toan goi " + plan.getName();
@@ -102,8 +108,8 @@ public class PaymentServiceImpl implements PaymentService {
                     .orderCode(orderCode)
                     .amount(amountInVND)
                     .description(description)
-                    .returnUrl(returnUrl)
-                    .cancelUrl(cancelUrl)
+                    .returnUrl(finalReturnUrl)
+                    .cancelUrl(finalCancelUrl)
                     .build();
 
             CreatePaymentLinkResponse checkoutResponse = payOS.paymentRequests().create(paymentData);
@@ -161,6 +167,8 @@ public class PaymentServiceImpl implements PaymentService {
             Subscription currentSub = user.getCurrentSubscription();
             if (currentSub != null && currentSub.getEndDate() != null && currentSub.getEndDate().isAfter(now)) {
                 startDate = currentSub.getEndDate();
+                currentSub.setStatus(SubscriptionStatus.EXPIRED);
+                subscriptionRepository.save(currentSub);
             }
             
             LocalDateTime endDate = startDate.plusDays(plan.getDurationDays() != null ? plan.getDurationDays() : 30);
@@ -169,7 +177,7 @@ public class PaymentServiceImpl implements PaymentService {
                     .user(user)
                     .plan(plan)
                     .status(SubscriptionStatus.ACTIVE)
-                    .startDate(now)
+                    .startDate(startDate)
                     .endDate(endDate)
                     .build();
 

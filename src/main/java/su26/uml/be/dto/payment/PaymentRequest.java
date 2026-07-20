@@ -13,4 +13,6 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 public class PaymentRequest {
     private UUID planId;
+    private String returnUrl;
+    private String cancelUrl;
 }

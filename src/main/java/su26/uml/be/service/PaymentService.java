@@ -8,7 +8,7 @@ import vn.payos.model.webhooks.WebhookData;
 import java.util.UUID;
 
 public interface PaymentService {
-    PaymentResponse createPaymentLink(User user, UUID planId);
+    PaymentResponse createPaymentLink(User user, UUID planId, String returnUrl, String cancelUrl);
     void processWebhook(WebhookData webhookData);
     PaymentStatusResponse getPaymentStatus(Long orderCode);
 }
