@@ -22,10 +22,10 @@ import java.util.UUID;
 @FieldDefaults(level = AccessLevel.PRIVATE)
 public class Plan extends BaseEntity {
 
-    @Column(nullable = false)
+    @Column(nullable = false, unique = true)
     String name;
 
-    @Column(nullable = false, precision = 10, scale = 2)
+    @Column(nullable = false, precision = 10, scale = 2, columnDefinition = "decimal(10,2) check (price >= 0)")
     BigDecimal price;
 
     @Column(nullable = false, length = 10, columnDefinition = "varchar(10) default 'VND'")
@@ -75,7 +75,7 @@ public class Plan extends BaseEntity {
 
     // ─── Subscription Phase 1 (Chặng 1A, additive nullable) ───
     /** Thứ bậc gói: 0 = Base/Free … 3 = Pro. Nguồn chuẩn để so nâng/hạ gói (KHÔNG suy theo giá/tên). */
-    @Column(name = "tier_order")
+    @Column(name = "tier_order", unique = true)
     Integer tierOrder;
 
     /** MONTHLY (Phase 1 cố định). Additive — chưa thay thế durationDays/yearlyBilling cho tới khi chốt F3. */
@@ -85,6 +85,10 @@ public class Plan extends BaseEntity {
     /** Độ dài kỳ quota (ngày); Phase 1 = 30. Additive song song durationDays (xem planing.md F3). */
     @Column(name = "quota_period_days")
     Integer quotaPeriodDays;
+
+    /** True if this is the base/fallback plan (one per system). New users without a subscription get this plan's quota. */
+    @Column(name = "is_base_plan", unique = true)
+    Boolean isBasePlan;
 
     @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default

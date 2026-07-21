@@ -592,23 +592,31 @@ public class UserServiceImpl implements UserService {
     }
 
     private void assignLowestPlan(User user) {
-        planRepository.findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE)
+        planRepository.findFirstByIsBasePlanTrueAndStatus(PlanStatus.ACTIVE)
+                .or(() -> planRepository.findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE))
                 .ifPresentOrElse(plan -> {
-                    LocalDateTime now = LocalDateTime.now();
-                    LocalDateTime endDate = plan.getDurationDays() != null && plan.getDurationDays() > 0
-                            ? now.plusDays(plan.getDurationDays())
-                            : null;
+                    boolean isBase = Boolean.TRUE.equals(plan.getIsBasePlan())
+                            || (plan.getTierOrder() != null && plan.getTierOrder() == 0)
+                            || plan.getPrice().signum() == 0;
+                    if (isBase) {
+                        user.setCurrentSubscription(null);
+                    } else {
+                        LocalDateTime now = LocalDateTime.now();
+                        LocalDateTime endDate = plan.getDurationDays() != null && plan.getDurationDays() > 0
+                                ? now.plusDays(plan.getDurationDays())
+                                : null;
 
-                    Subscription subscription = Subscription.builder()
-                            .user(user)
-                            .plan(plan)
-                            .status(SubscriptionStatus.ACTIVE)
-                            .startDate(now)
-                            .endDate(endDate)
-                            .build();
+                        Subscription subscription = Subscription.builder()
+                                .user(user)
+                                .plan(plan)
+                                .status(SubscriptionStatus.ACTIVE)
+                                .startDate(now)
+                                .endDate(endDate)
+                                .build();
 
-                    subscriptionRepository.save(subscription);
-                    user.setCurrentSubscription(subscription);
+                        subscriptionRepository.save(subscription);
+                        user.setCurrentSubscription(subscription);
+                    }
                 }, () -> log.warn("Không tìm thấy gói ACTIVE nào — user {} không được gán subscription", user.getEmail()));
     }
 }

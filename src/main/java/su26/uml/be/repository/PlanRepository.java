@@ -19,6 +19,15 @@ public interface PlanRepository extends JpaRepository<Plan, UUID> {
     /** Gói mặc định cho user chưa có subscription = gói ACTIVE giá thấp nhất. */
     Optional<Plan> findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus status);
 
+    /** Gói base = gói được đánh dấu isBasePlan = true và đang ACTIVE. */
+    Optional<Plan> findFirstByIsBasePlanTrueAndStatus(PlanStatus status);
+
+    /** Kiểm tra unique isBasePlan (chỉ 1 gói base duy nhất). */
+    Optional<Plan> findByIsBasePlanTrue();
+
+    /** Kiểm tra unique tierOrder. */
+    boolean existsByTierOrder(Integer tierOrder);
+
     /** Ngưỡng rate-limit cao nhất (cho admin / user chưa có gói). */
     @Query("SELECT MAX(p.rateLimitPer10s) FROM Plan p")
     Integer findMaxRatePer10s();

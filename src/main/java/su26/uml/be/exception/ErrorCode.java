@@ -141,6 +141,7 @@ public enum ErrorCode {
     PLAN_PRICE_INVALID(2112, "Giá gói phải lớn hơn hoặc bằng 0", HttpStatus.BAD_REQUEST),
     PLAN_NAME_EXISTED(2113, "Tên gói đã tồn tại", HttpStatus.BAD_REQUEST),
     PLAN_HAS_SUBSCRIBERS(2114, "Không thể xoá gói đang có người đăng ký. Hãy chuyển sang trạng thái archived.", HttpStatus.BAD_REQUEST),
+    PLAN_BASE_DELETE_DENIED(2115, "Không thể xoá gói cơ bản (base plan). Hãy tạo gói base khác trước.", HttpStatus.BAD_REQUEST),
 
     // FEATURE CATALOG ERRORS
     FEATURE_LABEL_REQUIRED(2120, "Tên tính năng không được để trống", HttpStatus.BAD_REQUEST),
@@ -188,6 +189,11 @@ public enum ErrorCode {
     QUOTE_EXPIRED(2146, "Báo giá đã hết hạn, vui lòng tạo lại", HttpStatus.BAD_REQUEST),
     PENDING_PAYMENT_EXISTS(2147, "Bạn đang có một giao dịch chờ thanh toán", HttpStatus.CONFLICT),
     PAYMENT_REQUIRES_REVIEW(2148, "Giao dịch cần được kiểm tra thủ công", HttpStatus.CONFLICT),
+
+    // PLAN VALIDATION (isBasePlan + tierOrder)
+    PLAN_TIER_ORDER_DUPLICATE(2116, "Thứ tự bậc (tierOrder) đã tồn tại ở gói khác", HttpStatus.BAD_REQUEST),
+    BASE_PLAN_ALREADY_EXISTS(2117, "Đã có gói cơ bản (base plan). Hãy bỏ đánh dấu gói cũ trước.", HttpStatus.BAD_REQUEST),
+    PLAN_TIER_REQUIRED(2118, "Gói trả phí phải có thứ tự bậc (tierOrder)", HttpStatus.BAD_REQUEST),
     ;
 
     private int code;

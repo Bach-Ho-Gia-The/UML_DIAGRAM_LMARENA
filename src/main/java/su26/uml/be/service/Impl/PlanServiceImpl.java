@@ -82,6 +82,7 @@ public class PlanServiceImpl implements PlanService {
             throw new AppException(ErrorCode.PLAN_NAME_EXISTED);
         }
 
+        validatePlanRequest(request, null);
         applyDefaults(request);
         Plan plan = planMapper.toPlan(request);
         applyLimits(plan, request);
@@ -105,6 +106,7 @@ public class PlanServiceImpl implements PlanService {
             throw new AppException(ErrorCode.PLAN_NAME_EXISTED);
         }
 
+        validatePlanRequest(request, plan);
         // Partial update of scalar fields (nulls ignored by the mapper).
         planMapper.updatePlan(request, plan);
 
@@ -126,6 +128,10 @@ public class PlanServiceImpl implements PlanService {
         Plan plan = planRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_NOT_FOUND));
 
+        if (Boolean.TRUE.equals(plan.getIsBasePlan())) {
+            throw new AppException(ErrorCode.PLAN_BASE_DELETE_DENIED);
+        }
+
         if (subscriptionRepository.existsByPlanAndStatus(plan, SubscriptionStatus.ACTIVE)) {
             throw new AppException(ErrorCode.PLAN_HAS_SUBSCRIBERS);
         }
@@ -135,6 +141,39 @@ public class PlanServiceImpl implements PlanService {
     }
 
     // --- helpers ---
+
+    private void validatePlanRequest(PlanRequest request, Plan existing) {
+        // price >= 0 (null đã bị @NotNull chặn ở DTO, guard thêm để defense-in-depth)
+        if (request.getPrice() == null || request.getPrice().compareTo(java.math.BigDecimal.ZERO) < 0) {
+            throw new AppException(ErrorCode.PLAN_PRICE_INVALID);
+        }
+
+        // isBasePlan: only one true in the system
+        if (Boolean.TRUE.equals(request.getIsBasePlan())) {
+            boolean alreadyHasBase = planRepository.findByIsBasePlanTrue()
+                    .map(p -> existing == null || !p.getId().equals(existing.getId()))
+                    .orElse(false);
+            if (alreadyHasBase) {
+                throw new AppException(ErrorCode.BASE_PLAN_ALREADY_EXISTS);
+            }
+        }
+
+        // tierOrder unique
+        if (request.getTierOrder() != null) {
+            boolean tierTaken = planRepository.existsByTierOrder(request.getTierOrder())
+                    && (existing == null || !request.getTierOrder().equals(existing.getTierOrder()));
+            if (tierTaken) {
+                throw new AppException(ErrorCode.PLAN_TIER_ORDER_DUPLICATE);
+            }
+        }
+
+        // tierOrder required for paid plans
+        if (request.getPrice().compareTo(java.math.BigDecimal.ZERO) > 0
+                && request.getTierOrder() == null
+                && (existing == null || existing.getTierOrder() == null)) {
+            throw new AppException(ErrorCode.PLAN_TIER_REQUIRED);
+        }
+    }
 
     private List<FeatureCatalog> loadCatalog() {
         return featureCatalogRepository.findAllByOrderBySortOrderAscLabelAsc();

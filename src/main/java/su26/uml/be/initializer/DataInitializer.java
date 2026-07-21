@@ -91,6 +91,9 @@ public class DataInitializer implements CommandLineRunner {
         // 4c. Seed tier_order + quota_period_days cho 4 gói mẫu (Chặng 1A/1C). Idempotent (chỉ set khi null).
         backfillPlanTierAndPeriod();
 
+        // 4d. Đánh dấu gói Free (UUID cố định) là base plan.
+        backfillBasePlan();
+
         // 5. Workspace file tree: backfill sheets.diagram_type + one root DIAGRAM item per sheet.
         backfillWorkspaceItems();
 
@@ -314,6 +317,16 @@ public class DataInitializer implements CommandLineRunner {
         jdbcTemplate.update(
                 "UPDATE plans SET tier_order = ? WHERE id = ? AND tier_order IS NULL",
                 tier, UUID.fromString(planId));
+    }
+
+    /** Đánh dấu gói Free là base plan (idempotent: chỉ set khi null). */
+    private void backfillBasePlan() {
+        int updated = jdbcTemplate.update(
+                "UPDATE plans SET is_base_plan = true WHERE id = ? AND is_base_plan IS NULL",
+                UUID.fromString("11111111-1111-1111-1111-111111111111"));
+        if (updated > 0) {
+            log.info("Marked Free plan as base plan.");
+        }
     }
 
     /**

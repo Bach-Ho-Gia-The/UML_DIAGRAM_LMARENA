@@ -74,6 +74,18 @@ public class PlanRequest {
             example = "[\"a1b2c3d4-...\", \"e5f6a7b8-...\"]")
     List<UUID> enabledFeatureIds;
 
+    @Schema(description = "Mark as the base/fallback plan (only one allowed).", example = "true")
+    Boolean isBasePlan;
+
+    @Schema(description = "Tier ordering: 0 = base, 1, 2, 3... Must be unique across plans.", example = "0")
+    Integer tierOrder;
+
+    @Schema(description = "Billing cycle (MONTHLY / YEARLY).", example = "MONTHLY")
+    String billingCycle;
+
+    @Schema(description = "Quota period in days.", example = "30")
+    Integer quotaPeriodDays;
+
     @Data
     @Builder
     @AllArgsConstructor

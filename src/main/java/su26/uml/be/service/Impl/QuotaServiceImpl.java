@@ -68,6 +68,12 @@ public class QuotaServiceImpl implements QuotaService {
                 .used(q.getAiUsed())
                 .limit(q.getAiLimit())
                 .resetAt(q.getResetAt())
+                .nominalLimit(q.getNominalAiLimit())
+                .effectiveLimit(q.getEffectiveAiLimit())
+                .periodStart(q.getQuotaPeriodStart())
+                .periodEnd(q.getQuotaPeriodEnd())
+                .planId(q.getPlanId())
+                .subscriptionId(q.getSubscriptionId())
                 .build();
     }
 
@@ -94,7 +100,9 @@ public class QuotaServiceImpl implements QuotaService {
     public void applyUpgrade(UUID userId, int newEffectiveLimit, UUID subscriptionId) {
         UserQuota q = getOrCreate(userId);
         q.setAiLimit(newEffectiveLimit);
+        q.setEffectiveAiLimit(newEffectiveLimit);
         q.setSubscriptionId(subscriptionId);
+        // planId sẽ được cập nhật ở lần syncQuotaToCurrentPlan hoặc applyPlanSnapshot kế tiếp.
         // KHÔNG đụng aiUsed và resetAt — giữ used & kỳ hiện tại (BR-UPGRADE-05/06).
         userQuotaRepository.save(q);
     }
@@ -128,28 +136,39 @@ public class QuotaServiceImpl implements QuotaService {
         }
     }
 
-    /** Snapshot plan hiện tại vào quota (limit, subscriptionId, resetAt) — không reset used. */
+    /** Snapshot plan hiện tại vào quota (limit, subscriptionId, resetAt, + Chặng 2B fields) — không reset used. */
     private void applyPlanSnapshot(UserQuota q, UUID userId) {
         LocalDateTime now = LocalDateTime.now();
         var subOpt = subscriptionRepository
                 .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, now);
         Plan plan = subOpt.map(Subscription::getPlan).orElseGet(() ->
-                planRepository.findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE).orElse(null));
-        q.setAiLimit(aiLimitOf(plan));
+                planRepository.findFirstByIsBasePlanTrueAndStatus(PlanStatus.ACTIVE)
+                        .or(() -> planRepository.findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE))
+                        .orElse(null));
+        int limit = aiLimitOf(plan);
+        q.setAiLimit(limit);
         q.setSubscriptionId(subOpt.map(Subscription::getId).orElse(null));
         // Paid: reset theo hết hạn subscription (kỳ billing). Gói tier thấp nhất (Free, không có sub):
         // reset lăn mỗi `periodDays` ngày kể từ bây giờ — dùng chung cơ chế, không còn mốc "vô cực".
-        q.setResetAt(subOpt.map(Subscription::getEndDate).orElse(now.plusDays(periodDays)));
+        LocalDateTime periodEnd = subOpt.map(Subscription::getEndDate).orElse(now.plusDays(periodDays));
+        q.setResetAt(periodEnd);
+        // Chặng 2B: populate new fields đồng bộ với old fields
+        q.setNominalAiLimit(limit);
+        q.setEffectiveAiLimit(limit);
+        q.setQuotaPeriodStart(now);
+        q.setQuotaPeriodEnd(periodEnd);
+        q.setPlanId(plan != null ? plan.getId() : null);
         userQuotaRepository.save(q);
     }
 
-    /** Gói hiện tại: subscription ACTIVE (chưa hết hạn) → gói; nếu không có → gói ACTIVE giá thấp nhất. */
+    /** Gói hiện tại: subscription ACTIVE (chưa hết hạn) → gói; nếu không có → gói base (isBasePlan), fallback giá thấp nhất. */
     private Plan currentPlan(UUID userId) {
         return subscriptionRepository
                 .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, LocalDateTime.now())
                 .map(s -> s.getPlan())
                 .orElseGet(() -> planRepository
-                        .findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE)
+                        .findFirstByIsBasePlanTrueAndStatus(PlanStatus.ACTIVE)
+                        .or(() -> planRepository.findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE))
                         .orElse(null));
     }
 
