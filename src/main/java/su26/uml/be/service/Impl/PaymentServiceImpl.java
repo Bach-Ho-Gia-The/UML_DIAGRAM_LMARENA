@@ -43,9 +43,14 @@ public class PaymentServiceImpl implements PaymentService {
     private final SubscriptionRepository subscriptionRepository;
     private final UserRepository userRepository;
     private final QuotaService quotaService;
+    private final su26.uml.be.service.SubscriptionActivationService subscriptionActivationService;
 
     @Value("${app.frontend.base-url:http://localhost:5173}")
     private String frontendUrl;
+
+    /** Chặng 2 cutover: ON → dùng SubscriptionActivationService idempotent; OFF → flow cũ inline. */
+    @Value("${feature.entitlement-v2-enabled:false}")
+    private boolean entitlementV2Enabled;
 
     /**
      * Loại bỏ dấu tiếng Việt và ký tự đặc biệt để tuân thủ yêu cầu ASCII của PayOS.
@@ -81,15 +86,21 @@ public class PaymentServiceImpl implements PaymentService {
                 .build();
 
         paymentTransactionRepository.save(transaction);
+        return createPayosLink(transaction, returnUrl, cancelUrl);
+    }
 
+    @Override
+    public PaymentResponse createPayosLink(PaymentTransaction transaction, String returnUrl, String cancelUrl) {
+        Plan plan = transaction.getPlan();
+        Long orderCode = transaction.getOrderCode();
         try {
             // Sử dụng returnUrl và cancelUrl truyền từ request, hoặc lấy default nếu không có
-            String finalReturnUrl = (returnUrl != null && !returnUrl.trim().isEmpty()) 
-                    ? returnUrl 
+            String finalReturnUrl = (returnUrl != null && !returnUrl.trim().isEmpty())
+                    ? returnUrl
                     : frontendUrl + "/";
-                    
-            String finalCancelUrl = (cancelUrl != null && !cancelUrl.trim().isEmpty()) 
-                    ? cancelUrl 
+
+            String finalCancelUrl = (cancelUrl != null && !cancelUrl.trim().isEmpty())
+                    ? cancelUrl
                     : frontendUrl + "/";
 
             // PayOS chỉ chấp nhận ASCII thuần túy, tối đa 25 ký tự
@@ -99,7 +110,8 @@ public class PaymentServiceImpl implements PaymentService {
                     ? safeDescription.substring(0, 25)
                     : safeDescription;
 
-            long amountInVND = plan.getPrice().setScale(0, RoundingMode.HALF_UP).longValue();
+            // Số tiền thực thu = amount của transaction (NEW = giá gói; UPGRADE = prorated).
+            long amountInVND = transaction.getAmount().setScale(0, RoundingMode.HALF_UP).longValue();
 
             log.info("Creating PayOS payment: orderCode={}, amountInVND={}, description='{}'",
                     orderCode, amountInVND, description);
@@ -126,8 +138,8 @@ public class PaymentServiceImpl implements PaymentService {
         } catch (AppException e) {
             throw e; // Re-throw typed exceptions as-is
         } catch (Exception e) {
-            log.error("Error creating payment link with PayOS: orderCode={}, planId={}, error={}",
-                    orderCode, planId, e.getMessage(), e);
+            log.error("Error creating payment link with PayOS: orderCode={}, error={}",
+                    orderCode, e.getMessage(), e);
             throw new AppException(ErrorCode.PAYMENT_LINK_CREATION_FAILED);
         }
     }
@@ -141,6 +153,12 @@ public class PaymentServiceImpl implements PaymentService {
             // Check if webhook represents a successful payment
             if (!"00".equals(webhookData.getCode())) {
                 log.info("Webhook event is not a successful payment. Code: {}", webhookData.getCode());
+                return;
+            }
+
+            // Chặng 2 cutover: activation idempotent tập trung (webhook + polling dùng chung).
+            if (entitlementV2Enabled) {
+                subscriptionActivationService.activate(orderCode);
                 return;
             }
 
@@ -206,9 +224,19 @@ public class PaymentServiceImpl implements PaymentService {
             try {
                 vn.payos.model.v2.paymentRequests.PaymentLink linkData = payOS.paymentRequests().get(orderCode);
                 if (vn.payos.model.v2.paymentRequests.PaymentLinkStatus.PAID.equals(linkData.getStatus())) {
+                    // Chặng 2 cutover: activation idempotent tập trung; reload để response phản ánh PAID.
+                    if (entitlementV2Enabled) {
+                        subscriptionActivationService.activate(orderCode);
+                        transaction = paymentTransactionRepository.findByOrderCode(orderCode).orElse(transaction);
+                        return PaymentStatusResponse.builder()
+                                .orderCode(transaction.getOrderCode())
+                                .status(transaction.getStatus().name())
+                                .planName(transaction.getPlan().getName())
+                                .build();
+                    }
                     transaction.setStatus(PaymentStatus.PAID);
                     paymentTransactionRepository.save(transaction);
-        
+
                     User user = transaction.getUser();
                     Plan plan = transaction.getPlan();
         
