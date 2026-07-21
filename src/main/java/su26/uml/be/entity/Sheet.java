@@ -28,6 +28,17 @@ public class Sheet extends BaseEntity {
     @Column(name = "diagram_type", length = 30)
     String diagramType;
 
+    // ─── Lifecycle Phase 1 (Chặng 1A, additive) — đồng bộ với Project ───
+    @Column(name = "lifecycle_status", length = 30, columnDefinition = "varchar(30) default 'ACTIVE'")
+    @Builder.Default
+    String lifecycleStatus = "ACTIVE";
+
+    @Column(name = "archived_at")
+    java.time.LocalDateTime archivedAt;
+
+    @Column(name = "purge_at")
+    java.time.LocalDateTime purgeAt;
+
     @ManyToOne
     @JoinColumn(name = "project_id", nullable = false)
     @ToString.Exclude

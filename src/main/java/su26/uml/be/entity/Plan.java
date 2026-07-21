@@ -73,6 +73,19 @@ public class Plan extends BaseEntity {
     @Column(name = "rate_limit_per_min")
     Integer rateLimitPerMin;
 
+    // ─── Subscription Phase 1 (Chặng 1A, additive nullable) ───
+    /** Thứ bậc gói: 0 = Base/Free … 3 = Pro. Nguồn chuẩn để so nâng/hạ gói (KHÔNG suy theo giá/tên). */
+    @Column(name = "tier_order")
+    Integer tierOrder;
+
+    /** MONTHLY (Phase 1 cố định). Additive — chưa thay thế durationDays/yearlyBilling cho tới khi chốt F3. */
+    @Column(name = "billing_cycle", length = 20)
+    String billingCycle;
+
+    /** Độ dài kỳ quota (ngày); Phase 1 = 30. Additive song song durationDays (xem planing.md F3). */
+    @Column(name = "quota_period_days")
+    Integer quotaPeriodDays;
+
     @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     @ToString.Exclude

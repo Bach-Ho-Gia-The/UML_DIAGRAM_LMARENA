@@ -46,4 +46,19 @@ public class Project extends BaseEntity {
     @Column(name = "public_access")
     @Builder.Default
     Boolean publicAccess = false;
+
+    // ─── Lifecycle Phase 1 (Chặng 1A, additive) — dùng cho Archive/Purge ở Chặng 4/5 ───
+    /** ACTIVE | ARCHIVED_OVER_LIMIT | TRASHED_BY_USER | PURGED. Default ACTIVE cho row cũ. */
+    @Column(name = "lifecycle_status", length = 30, columnDefinition = "varchar(30) default 'ACTIVE'")
+    @Builder.Default
+    String lifecycleStatus = "ACTIVE";
+
+    @Column(name = "archived_reason", length = 255)
+    String archivedReason;
+
+    @Column(name = "archived_at")
+    java.time.LocalDateTime archivedAt;
+
+    @Column(name = "purge_at")
+    java.time.LocalDateTime purgeAt;
 }
