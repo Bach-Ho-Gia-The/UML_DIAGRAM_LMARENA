@@ -15,6 +15,10 @@ public interface UserQuotaRepository extends JpaRepository<UserQuota, UUID> {
 
     Optional<UserQuota> findByUserId(UUID userId);
 
+    // ─── Subscription Phase 1 (Chặng 1B, additive) ───
+    /** Quota có kỳ hiện tại chưa hết (quotaPeriodEnd > now). Dùng cho QuotaPeriodService ở Chặng 1C. */
+    Optional<UserQuota> findByUserIdAndQuotaPeriodEndAfter(UUID userId, java.time.LocalDateTime now);
+
     /**
      * Reserve atomic 1 AI request: chỉ trừ khi còn quota (hoặc unlimited).
      * @return số dòng bị đổi — 1 = reserve OK, 0 = hết quota (402).

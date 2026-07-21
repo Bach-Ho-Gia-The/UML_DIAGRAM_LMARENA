@@ -24,4 +24,12 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
 
     /** Gói ACTIVE hiện tại của user (mới nhất theo endDate). */
     Optional<Subscription> findFirstByUser_IdAndStatusOrderByEndDateDesc(UUID userId, SubscriptionStatus status);
+
+    // ─── Subscription Phase 1 (Chặng 1B, additive — chưa code nào gọi tới Chặng 1C/2) ───
+    /**
+     * Paid subscription "effective" theo thiết kế §1.3: status ∈ {statuses}, startDate ≤ now, endDate > now.
+     * (Chữ ký lệch plan Task 1.8 để hợp lệ Spring Data: User_Id + enum SubscriptionStatus + LessThanEqual.)
+     */
+    Optional<Subscription> findFirstByUser_IdAndStatusInAndStartDateLessThanEqualAndEndDateAfterOrderByEndDateDesc(
+            UUID userId, List<SubscriptionStatus> statuses, LocalDateTime start, LocalDateTime end);
 }

@@ -77,4 +77,10 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
 
     // Phân trang TẦNG TRONG: project của riêng một owner
     Page<Project> findAllByUser_IdAndIsDeletedFalse(UUID ownerId, Pageable pageable);
+
+    // ─── Lifecycle Phase 1 (Chặng 1B, additive — dùng cho Archive/capacity ở Chặng 4) ───
+    /** Project của user theo lifecycleStatus (vd loại ARCHIVED_OVER_LIMIT khỏi list thường). */
+    Page<Project> findAllByUserAndIsDeletedFalseAndLifecycleStatus(User user, String lifecycleStatus, Pageable pageable);
+    List<Project> findByUser_IdAndLifecycleStatus(UUID userId, String lifecycleStatus);
+    long countByUser_IdAndLifecycleStatus(UUID userId, String lifecycleStatus);
 }
