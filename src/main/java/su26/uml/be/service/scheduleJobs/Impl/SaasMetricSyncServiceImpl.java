@@ -50,9 +50,8 @@ public class SaasMetricSyncServiceImpl implements SaasMetricSyncService {
                 + subscriptionRepository.countByStatusAndEndDateBetween(SubscriptionStatus.CANCELLED, last30d, now);
         double churnRate = activeBefore30d == 0 ? 0 : Math.round((double) churned30d / activeBefore30d * 100 * 10.0) / 10.0;
 
-        BigDecimal mrr = subscriptionRepository.findByStatus(SubscriptionStatus.ACTIVE).stream()
-                .map(s -> s.getPlan().getPrice())
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // MRR: SUM(plan.price) tính thẳng trong SQL — không đọc lazy Plan proxy ngoài session (fix A2).
+        BigDecimal mrr = subscriptionRepository.sumPlanPriceByStatus(SubscriptionStatus.ACTIVE);
         BigDecimal arpu = totalUsers == 0 ? BigDecimal.ZERO
                 : mrr.divide(BigDecimal.valueOf(totalUsers), 2, RoundingMode.HALF_UP);
 

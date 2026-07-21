@@ -1,11 +1,14 @@
 package su26.uml.be.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import su26.uml.be.entity.Plan;
 import su26.uml.be.entity.Subscription;
 import su26.uml.be.enums.SubscriptionStatus;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -14,6 +17,13 @@ import java.util.UUID;
 @Repository
 public interface SubscriptionRepository extends JpaRepository<Subscription, Long> {
     List<Subscription> findByStatus(SubscriptionStatus status);
+
+    /**
+     * Tổng giá gói của các subscription theo status (tính SUM trong SQL, JOIN sang plan) — dùng cho MRR.
+     * Tránh {@code LazyInitializationException} khi đọc {@code plan.price} ngoài session (bug A2).
+     */
+    @Query("SELECT COALESCE(SUM(s.plan.price), 0) FROM Subscription s WHERE s.status = :status")
+    BigDecimal sumPlanPriceByStatus(@Param("status") SubscriptionStatus status);
     long countByStatusAndEndDateBetween(SubscriptionStatus status, LocalDateTime from, LocalDateTime to);
     long countByStartDateBeforeAndStatus(LocalDateTime before, SubscriptionStatus status);
     long countByPlanAndStatus(Plan plan, SubscriptionStatus status);
