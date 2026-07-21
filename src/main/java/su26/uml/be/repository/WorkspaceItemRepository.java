@@ -15,6 +15,8 @@ public interface WorkspaceItemRepository extends JpaRepository<WorkspaceItem, UU
 
     List<WorkspaceItem> findAllByProjectOrderByOrderIndexAsc(Project project);
 
+    void deleteAllByProject(Project project);
+
     Optional<WorkspaceItem> findBySheet(Sheet sheet);
 
     boolean existsBySheet(Sheet sheet);

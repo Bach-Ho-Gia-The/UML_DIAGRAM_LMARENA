@@ -17,6 +17,8 @@ import java.util.UUID;
 public interface SheetRepository extends JpaRepository<Sheet, UUID> {
     List<Sheet> findAllByProjectOrderByOrderIndexAsc(Project project);
 
+    void deleteAllByProject(Project project);
+
     long countByProject_UserAndProject_IsDeletedFalse(User user);
 
     long countByCreatedAtBetween(LocalDateTime from, LocalDateTime to);

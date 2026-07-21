@@ -17,6 +17,11 @@ public interface ProjectService {
     ApiResponse<Void> deleteProject(DeleteProjectRequest request, String email);
     ApiResponse<ProjectResponse> getProjectById(UUID projectId, String email);
     ApiResponse<PagedResponse<ProjectResponse>> getAllUserProjects(String email, Boolean isDraft, Pageable pageable);
+    ApiResponse<PagedResponse<ProjectResponse>> getTrashProjects(String email, Pageable pageable);
+    ApiResponse<PagedResponse<ProjectResponse>> getArchivedProjects(String email, Pageable pageable);
+    ApiResponse<ProjectResponse> toggleArchiveProject(UUID projectId, String email);
+    ApiResponse<ProjectResponse> restoreProject(UUID projectId, String email);
+    ApiResponse<Void> permanentDeleteProject(UUID projectId, String email);
     ApiResponse<PagedResponse<ProjectResponse>> getAllProjectsForAdmin(Pageable pageable);
 
     // Admin Projects — 3 nguồn dữ liệu độc lập

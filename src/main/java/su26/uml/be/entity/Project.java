@@ -39,6 +39,10 @@ public class Project extends BaseEntity {
     @Builder.Default
     boolean isDeleted = false;
 
+    @Column(name = "is_archived")
+    @Builder.Default
+    boolean isArchived = false;
+
     @Column(name = "is_draft")
     @Builder.Default
     boolean isDraft = false;

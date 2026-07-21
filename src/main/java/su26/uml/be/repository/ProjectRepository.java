@@ -51,8 +51,11 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
     // Biến thể phân trang — KHÔNG dùng @EntityGraph(sheets) vì fetch collection kèm Pageable
     // khiến Hibernate phân trang trong bộ nhớ (HHH000104); diagramCount lazy-load trong tx read-only.
     Page<Project> findAllByUserAndIsDeletedFalse(User user, Pageable pageable);
-    Page<Project> findAllByUserAndIsDeletedFalseAndIsDraftFalse(User user, Pageable pageable);
-    Page<Project> findAllByUserAndIsDeletedFalseAndIsDraftTrue(User user, Pageable pageable);
+    Page<Project> findAllByUserAndIsDeletedTrue(User user, Pageable pageable);
+    Page<Project> findAllByUserAndIsDeletedFalseAndIsArchivedTrue(User user, Pageable pageable);
+    Page<Project> findAllByUserAndIsDeletedFalseAndIsArchivedFalse(User user, Pageable pageable);
+    Page<Project> findAllByUserAndIsDeletedFalseAndIsArchivedFalseAndIsDraftFalse(User user, Pageable pageable);
+    Page<Project> findAllByUserAndIsDeletedFalseAndIsArchivedFalseAndIsDraftTrue(User user, Pageable pageable);
     Page<Project> findAllByIsDeletedFalseAndIsDraftFalse(Pageable pageable);
 
     long countByCreatedAtBetweenAndIsDeletedFalse(LocalDateTime from, LocalDateTime to);

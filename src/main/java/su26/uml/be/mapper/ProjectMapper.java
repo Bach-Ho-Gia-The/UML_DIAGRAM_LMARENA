@@ -17,6 +17,7 @@ public interface ProjectMapper {
     // Entity field `boolean isDraft` → getter isDraft() → property "draft"; target DTO (Boolean) property là
     // "isDraft" nên MapStruct không tự khớp — thiếu dòng này thì response luôn trả isDraft=null.
     @Mapping(target = "isDraft", source = "draft")
+    @Mapping(target = "isArchived", source = "archived")
     @Mapping(target = "diagramCount", expression = "java(project.getSheets() != null ? project.getSheets().size() : 0)")
     ProjectResponse toProjectResponse(Project project);
 

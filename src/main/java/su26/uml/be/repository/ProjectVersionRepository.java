@@ -11,4 +11,6 @@ import java.util.UUID;
 @Repository
 public interface ProjectVersionRepository extends JpaRepository<ProjectVersion, UUID> {
     Optional<ProjectVersion> findFirstByProjectOrderByVersionNumberDesc(Project project);
+
+    void deleteAllByProject(Project project);
 }

@@ -34,11 +34,7 @@ import su26.uml.be.exception.ErrorCode;
 import su26.uml.be.mapper.ProjectMapper;
 import su26.uml.be.mapper.SheetMapper;
 import su26.uml.be.mapper.WorkspaceItemMapper;
-import su26.uml.be.repository.ProjectRepository;
-import su26.uml.be.repository.ProjectVersionRepository;
-import su26.uml.be.repository.SheetRepository;
-import su26.uml.be.repository.UserRepository;
-import su26.uml.be.repository.WorkspaceItemRepository;
+import su26.uml.be.repository.*;
 import su26.uml.be.service.PlanLimitService;
 import su26.uml.be.service.ProjectService;
 import su26.uml.be.service.SocketService;
@@ -59,6 +55,7 @@ public class ProjectServiceImpl implements ProjectService {
     WorkspaceItemMapper workspaceItemMapper;
     SocketService socketService;
     PlanLimitService planLimitService;
+    DiagramVersionRepository diagramVersionRepository;
     ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -81,7 +78,7 @@ public class ProjectServiceImpl implements ProjectService {
         if (request.getPublicAccess() != null) {
             project.setPublicAccess(request.getPublicAccess());
         }
-        
+
         Project savedProject = projectRepository.save(project);
 
         // Tạo Sheet mặc định cho Canvas JSON
@@ -127,9 +124,9 @@ public class ProjectServiceImpl implements ProjectService {
         if (request.getPublicAccess() != null) {
             boolean wasPublic = Boolean.TRUE.equals(project.getPublicAccess());
             boolean isNowPublic = Boolean.TRUE.equals(request.getPublicAccess());
-            
+
             project.setPublicAccess(request.getPublicAccess());
-            
+
             // If changed from Public to Private, kick everyone out
             if (wasPublic && !isNowPublic) {
                 socketService.broadcastCollabDisabled(projectId);
@@ -147,20 +144,20 @@ public class ProjectServiceImpl implements ProjectService {
         boolean isAdmin = user.getRole().getRoleName().equals("ADMIN");
 
         List<Project> projects = projectRepository.findAllByIdIn(request.getIds());
-        
+
         for (Project project : projects) {
             if (!isAdmin && !project.getUser().getEmail().equals(email)) {
                 throw new AppException(ErrorCode.PROJECT_ACCESS_DENIED);
             }
-            
+
             saveProjectVersion(project);
-            
+
             project.setDeleted(true);
             project.setUpdatedAt(LocalDateTime.now());
         }
-        
+
         projectRepository.saveAll(projects);
-        
+
         log.info("Bulk soft-deleted {} projects by user/admin: {}", projects.size(), email);
         return ApiResponse.success("Xóa các dự án thành công");
     }
@@ -178,14 +175,81 @@ public class ProjectServiceImpl implements ProjectService {
 
         Page<Project> projects;
         if (isDraft == null) {
-            projects = projectRepository.findAllByUserAndIsDeletedFalse(user, pageable);
+            projects = projectRepository.findAllByUserAndIsDeletedFalseAndIsArchivedFalse(user, pageable);
         } else if (isDraft) {
-            projects = projectRepository.findAllByUserAndIsDeletedFalseAndIsDraftTrue(user, pageable);
+            projects = projectRepository.findAllByUserAndIsDeletedFalseAndIsArchivedFalseAndIsDraftTrue(user, pageable);
         } else {
-            projects = projectRepository.findAllByUserAndIsDeletedFalseAndIsDraftFalse(user, pageable);
+            projects = projectRepository.findAllByUserAndIsDeletedFalseAndIsArchivedFalseAndIsDraftFalse(user, pageable);
         }
         return ApiResponse.success("Lấy danh sách dự án thành công",
                 PagedResponse.from(projects.map(projectMapper::toProjectResponse)));
+    }
+
+    @Override
+    public ApiResponse<PagedResponse<ProjectResponse>> getTrashProjects(String email, Pageable pageable) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        Page<Project> projects = projectRepository.findAllByUserAndIsDeletedTrue(user, pageable);
+        return ApiResponse.success("Lấy danh sách thùng rác thành công",
+                PagedResponse.from(projects.map(projectMapper::toProjectResponse)));
+    }
+
+    @Override
+    public ApiResponse<PagedResponse<ProjectResponse>> getArchivedProjects(String email, Pageable pageable) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        Page<Project> projects = projectRepository.findAllByUserAndIsDeletedFalseAndIsArchivedTrue(user, pageable);
+        return ApiResponse.success("Lấy danh sách lưu trữ thành công",
+                PagedResponse.from(projects.map(projectMapper::toProjectResponse)));
+    }
+
+    @Override
+    public ApiResponse<ProjectResponse> toggleArchiveProject(UUID projectId, String email) {
+        Project project = getProjectAndValidateOwnership(projectId, email);
+        project.setArchived(!project.isArchived());
+        project.setUpdatedAt(LocalDateTime.now());
+        Project saved = projectRepository.save(project);
+        String msg = saved.isArchived() ? "Đã lưu trữ dự án" : "Đã hủy lưu trữ dự án";
+        return ApiResponse.success(msg, projectMapper.toProjectResponse(saved));
+    }
+
+    @Override
+    public ApiResponse<ProjectResponse> restoreProject(UUID projectId, String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new AppException(ErrorCode.PROJECT_NOT_FOUND));
+        if (!project.getUser().getId().equals(user.getId()) && !user.getRole().getRoleName().equals("ADMIN")) {
+            throw new AppException(ErrorCode.PROJECT_ACCESS_DENIED);
+        }
+        project.setDeleted(false);
+        project.setUpdatedAt(LocalDateTime.now());
+        Project saved = projectRepository.save(project);
+        return ApiResponse.success("Khôi phục dự án thành công", projectMapper.toProjectResponse(saved));
+    }
+
+    @Override
+    @Transactional
+    public ApiResponse<Void> permanentDeleteProject(UUID projectId, String email) {
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        Project project = projectRepository.findById(projectId)
+                .orElseThrow(() -> new AppException(ErrorCode.PROJECT_NOT_FOUND));
+        if (!project.getUser().getId().equals(user.getId()) && !user.getRole().getRoleName().equals("ADMIN")) {
+            throw new AppException(ErrorCode.PROJECT_ACCESS_DENIED);
+        }
+
+        // Dùng phương thức chuẩn của Spring Data JPA (Derived Query Methods) — KHÔNG DÙNG @Query
+        List<Sheet> sheets = sheetRepository.findAllByProjectOrderByOrderIndexAsc(project);
+        if (!sheets.isEmpty()) {
+            diagramVersionRepository.deleteAllBySheetIn(sheets);
+        }
+        workspaceItemRepository.deleteAllByProject(project);
+        projectVersionRepository.deleteAllByProject(project);
+        sheetRepository.deleteAllByProject(project);
+        projectRepository.delete(project);
+
+        return ApiResponse.success("Xóa vĩnh viễn dự án thành công");
     }
 
     @Override
@@ -273,7 +337,7 @@ public class ProjectServiceImpl implements ProjectService {
                 .projectSnapshot(snapshot)
                 .versionNumber(lastVersion + 1)
                 .build();
-        
+
         projectVersionRepository.save(version);
     }
 }

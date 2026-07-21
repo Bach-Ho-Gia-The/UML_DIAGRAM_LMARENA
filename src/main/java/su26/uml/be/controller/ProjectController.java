@@ -70,6 +70,26 @@ public class ProjectController {
         return projectService.getAllUserProjects(userDetails.getUsername(), isDraft, pageable);
     }
 
+    @GetMapping("/trash")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    @Operation(summary = "Get soft-deleted projects in Trash (paginated)",
+            description = "Returns soft-deleted projects for the authenticated user.")
+    public ApiResponse<PagedResponse<ProjectResponse>> getTrashProjects(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PageableDefault(size = 20, sort = "updatedAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return projectService.getTrashProjects(userDetails.getUsername(), pageable);
+    }
+
+    @GetMapping("/archived")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    @Operation(summary = "Get archived projects (paginated)",
+            description = "Returns active archived projects for the authenticated user.")
+    public ApiResponse<PagedResponse<ProjectResponse>> getArchivedProjects(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PageableDefault(size = 20, sort = "updatedAt", direction = Sort.Direction.DESC) Pageable pageable) {
+        return projectService.getArchivedProjects(userDetails.getUsername(), pageable);
+    }
+
     @GetMapping("/admin/all")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Get all projects for Admin (paginated)",
@@ -136,6 +156,36 @@ public class ProjectController {
             @Valid @RequestBody ProjectRequest request) {
         activityTracker.trackActivity(userDetails.getUsername());
         return projectService.updateProject(projectId, userDetails.getUsername(), request);
+    }
+
+    @PatchMapping("/{projectId}/archive")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    @Operation(summary = "Toggle project archive status", description = "Toggles isArchived state for a project.")
+    public ApiResponse<ProjectResponse> toggleArchiveProject(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable UUID projectId) {
+        activityTracker.trackActivity(userDetails.getUsername());
+        return projectService.toggleArchiveProject(projectId, userDetails.getUsername());
+    }
+
+    @PatchMapping("/{projectId}/restore")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    @Operation(summary = "Restore project from Trash", description = "Restores a soft-deleted project (isDeleted=false).")
+    public ApiResponse<ProjectResponse> restoreProject(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable UUID projectId) {
+        activityTracker.trackActivity(userDetails.getUsername());
+        return projectService.restoreProject(projectId, userDetails.getUsername());
+    }
+
+    @DeleteMapping("/{projectId}/permanent")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    @Operation(summary = "Permanently delete project", description = "Hard-deletes a project from the database permanently.")
+    public ApiResponse<Void> permanentDeleteProject(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @PathVariable UUID projectId) {
+        activityTracker.trackActivity(userDetails.getUsername());
+        return projectService.permanentDeleteProject(projectId, userDetails.getUsername());
     }
 
     @DeleteMapping

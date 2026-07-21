@@ -46,6 +46,9 @@ public class ProjectResponse {
     @Schema(description = "Whether this project is a draft.")
     Boolean isDraft;
 
+    @Schema(description = "Whether this project is archived.")
+    Boolean isArchived;
+
     @Schema(description = "Whether this project is publicly accessible.")
     Boolean publicAccess;
 
