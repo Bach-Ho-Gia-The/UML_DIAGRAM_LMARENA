@@ -32,13 +32,6 @@ import java.util.UUID;
 @Slf4j
 public class QuotaServiceImpl implements QuotaService {
 
-    /**
-     * Mốc "không bao giờ reset" cho gói vĩnh viễn (Free / subscription không có endDate).
-     * KHÔNG dùng {@link LocalDateTime#MAX} vì năm 999999999 vượt giới hạn timestamp của PostgreSQL
-     * (~294276 AD) → "timestamp out of range". 9999-12-31 vừa đủ xa vừa lưu được.
-     */
-    static final LocalDateTime NEVER_RESET = LocalDateTime.of(9999, 12, 31, 23, 59, 59);
-
     @org.springframework.beans.factory.annotation.Value("${quota.period-days:30}")
     @lombok.experimental.NonFinal
     int periodDays;
@@ -96,6 +89,16 @@ public class QuotaServiceImpl implements QuotaService {
         applyPlanSnapshot(q, userId);
     }
 
+    @Override
+    @Transactional
+    public void applyUpgrade(UUID userId, int newEffectiveLimit, UUID subscriptionId) {
+        UserQuota q = getOrCreate(userId);
+        q.setAiLimit(newEffectiveLimit);
+        q.setSubscriptionId(subscriptionId);
+        // KHÔNG đụng aiUsed và resetAt — giữ used & kỳ hiện tại (BR-UPGRADE-05/06).
+        userQuotaRepository.save(q);
+    }
+
     // --- helpers ---
 
     private UserQuota getOrCreate(UUID userId) {
@@ -127,13 +130,16 @@ public class QuotaServiceImpl implements QuotaService {
 
     /** Snapshot plan hiện tại vào quota (limit, subscriptionId, resetAt) — không reset used. */
     private void applyPlanSnapshot(UserQuota q, UUID userId) {
+        LocalDateTime now = LocalDateTime.now();
         var subOpt = subscriptionRepository
-                .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, LocalDateTime.now());
+                .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, now);
         Plan plan = subOpt.map(Subscription::getPlan).orElseGet(() ->
                 planRepository.findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE).orElse(null));
         q.setAiLimit(aiLimitOf(plan));
         q.setSubscriptionId(subOpt.map(Subscription::getId).orElse(null));
-        q.setResetAt(subOpt.map(Subscription::getEndDate).orElse(NEVER_RESET));
+        // Paid: reset theo hết hạn subscription (kỳ billing). Gói tier thấp nhất (Free, không có sub):
+        // reset lăn mỗi `periodDays` ngày kể từ bây giờ — dùng chung cơ chế, không còn mốc "vô cực".
+        q.setResetAt(subOpt.map(Subscription::getEndDate).orElse(now.plusDays(periodDays)));
         userQuotaRepository.save(q);
     }
 

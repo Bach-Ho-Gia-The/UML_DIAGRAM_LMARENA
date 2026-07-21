@@ -24,4 +24,10 @@ public interface QuotaService {
 
     /** Reset quota khi user đổi gói (mua/nâng/hạ/hết hạn). */
     void resetOnPlanChange(UUID userId);
+
+    /**
+     * Áp nâng cấp giữa kỳ: đặt limit mới = {@code newEffectiveLimit} và gắn {@code subscriptionId} mới,
+     * NHƯNG giữ nguyên {@code aiUsed} và {@code resetAt} (BR-UPGRADE-05/06 — không reset used, không kéo dài kỳ).
+     */
+    void applyUpgrade(UUID userId, int newEffectiveLimit, UUID subscriptionId);
 }

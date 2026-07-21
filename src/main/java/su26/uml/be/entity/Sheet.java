@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.SuperBuilder;
+import su26.uml.be.enums.LifecycleStatus;
 
 @Entity
 @Table(name = "sheets")
@@ -27,6 +28,18 @@ public class Sheet extends BaseEntity {
     // fallback "activity" khi thiếu — FE không phải parse diagramData để lấy type nữa
     @Column(name = "diagram_type", length = 30)
     String diagramType;
+
+    // ─── Lifecycle Phase 1 (Chặng 1A, additive) — đồng bộ với Project ───
+    @Enumerated(EnumType.STRING)
+    @Column(name = "lifecycle_status", length = 30, columnDefinition = "varchar(30) default 'ACTIVE'")
+    @Builder.Default
+    LifecycleStatus lifecycleStatus = LifecycleStatus.ACTIVE;
+
+    @Column(name = "archived_at")
+    java.time.LocalDateTime archivedAt;
+
+    @Column(name = "purge_at")
+    java.time.LocalDateTime purgeAt;
 
     @ManyToOne
     @JoinColumn(name = "project_id", nullable = false)

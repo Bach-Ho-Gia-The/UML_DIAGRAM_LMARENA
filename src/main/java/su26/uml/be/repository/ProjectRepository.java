@@ -12,6 +12,7 @@ import org.springframework.stereotype.Repository;
 import su26.uml.be.dto.response.OwnerGroupResponse;
 import su26.uml.be.entity.Project;
 import su26.uml.be.entity.User;
+import su26.uml.be.enums.LifecycleStatus;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -80,4 +81,10 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
 
     // Phân trang TẦNG TRONG: project của riêng một owner
     Page<Project> findAllByUser_IdAndIsDeletedFalse(UUID ownerId, Pageable pageable);
+
+    // ─── Lifecycle Phase 1 (Chặng 1B, additive — dùng cho Archive/capacity ở Chặng 4) ───
+    /** Project của user theo lifecycleStatus (vd loại ARCHIVED_OVER_LIMIT khỏi list thường). */
+    Page<Project> findAllByUserAndIsDeletedFalseAndLifecycleStatus(User user, LifecycleStatus lifecycleStatus, Pageable pageable);
+    List<Project> findByUser_IdAndLifecycleStatus(UUID userId, LifecycleStatus lifecycleStatus);
+    long countByUser_IdAndLifecycleStatus(UUID userId, LifecycleStatus lifecycleStatus);
 }

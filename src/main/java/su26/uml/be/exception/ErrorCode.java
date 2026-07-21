@@ -177,6 +177,17 @@ public enum ErrorCode {
     DIAGRAM_VERSION_SOURCE_REQUIRED(2224, "Nguồn tạo phiên bản (AUTO/MANUAL/...) không được để trống", HttpStatus.BAD_REQUEST),
     DIAGRAM_VERSION_NAME_TOO_LONG(2225, "Tên phiên bản không được vượt quá 255 ký tự", HttpStatus.BAD_REQUEST),
     DIAGRAM_VERSION_SHEET_MISMATCH(2226, "Phiên bản không thuộc trang biểu đồ này", HttpStatus.BAD_REQUEST),
+
+    // SUBSCRIPTION / UPGRADE (Phase 1 — Chặng 1C/2)
+    FEATURE_DISABLED(2140, "Tính năng chưa được bật", HttpStatus.NOT_FOUND),
+    UPGRADE_REQUIRES_ACTIVE_SUBSCRIPTION(2141, "Bạn chưa có gói trả phí đang hiệu lực để nâng cấp", HttpStatus.BAD_REQUEST),
+    UPGRADE_TARGET_NOT_HIGHER_TIER(2142, "Chỉ có thể nâng lên gói bậc cao hơn", HttpStatus.BAD_REQUEST),
+    PLAN_TIER_NOT_CONFIGURED(2143, "Gói chưa được cấu hình bậc (tierOrder)", HttpStatus.BAD_REQUEST),
+    SUBSCRIPTION_ALREADY_ACTIVE(2144, "Bạn đang có gói này còn hiệu lực", HttpStatus.BAD_REQUEST),
+    DOWNGRADE_NOT_ALLOWED_WHILE_ACTIVE(2145, "Không thể hạ gói khi gói hiện tại còn hiệu lực", HttpStatus.BAD_REQUEST),
+    QUOTE_EXPIRED(2146, "Báo giá đã hết hạn, vui lòng tạo lại", HttpStatus.BAD_REQUEST),
+    PENDING_PAYMENT_EXISTS(2147, "Bạn đang có một giao dịch chờ thanh toán", HttpStatus.CONFLICT),
+    PAYMENT_REQUIRES_REVIEW(2148, "Giao dịch cần được kiểm tra thủ công", HttpStatus.CONFLICT),
     ;
 
     private int code;

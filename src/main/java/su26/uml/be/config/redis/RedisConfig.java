@@ -10,12 +10,12 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
 @Configuration
 public class RedisConfig {
 
-    @Bean
-    public LettuceClientConfigurationBuilderCustomizer lettuceCustomizer() {
-        return builder -> builder
-                .useSsl()
-                .disablePeerVerification();
-    }
+//    @Bean
+//    public LettuceClientConfigurationBuilderCustomizer lettuceCustomizer() {
+//        return builder -> builder
+//                .useSsl()
+//                .disablePeerVerification();
+//    }
 
     @Bean
     public RedisTemplate<String, String> redisTemplate(RedisConnectionFactory connectionFactory) {

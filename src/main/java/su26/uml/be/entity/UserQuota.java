@@ -53,4 +53,24 @@ public class UserQuota extends BaseEntity {
     /** Thời điểm reset kỳ (lazy). */
     @Column(name = "reset_at", nullable = false)
     LocalDateTime resetAt;
+
+    // ─── Subscription Phase 1 (Chặng 1A, additive nullable) ───
+    // Song song aiLimit/resetAt cũ (xem planing.md R2 — chốt cơ chế period ở Chặng 2B/3.3 trước khi dùng).
+    /** Full quota của gói cho 1 kỳ đầy đủ (snapshot). */
+    @Column(name = "nominal_ai_limit")
+    Integer nominalAiLimit;
+
+    /** Limit thực tế kỳ hiện tại sau proration (nominal + delta khi upgrade giữa kỳ). */
+    @Column(name = "effective_ai_limit")
+    Integer effectiveAiLimit;
+
+    @Column(name = "quota_period_start")
+    LocalDateTime quotaPeriodStart;
+
+    @Column(name = "quota_period_end")
+    LocalDateTime quotaPeriodEnd;
+
+    /** Plan đang áp cho quota này (base plan khi subscriptionId = null). */
+    @Column(name = "plan_id")
+    UUID planId;
 }

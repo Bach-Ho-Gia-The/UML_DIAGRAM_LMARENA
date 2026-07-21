@@ -3,5 +3,7 @@ package su26.uml.be.enums;
 public enum SubscriptionStatus {
     ACTIVE,
     EXPIRED,
-    CANCELLED
+    CANCELLED,
+    /** Sub cũ bị thay thế khi user upgrade lên tier cao hơn giữa kỳ (Chặng 2). */
+    REPLACED
 }

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.SuperBuilder;
+import su26.uml.be.enums.LifecycleStatus;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,4 +51,20 @@ public class Project extends BaseEntity {
     @Column(name = "public_access")
     @Builder.Default
     Boolean publicAccess = false;
+
+    // ─── Lifecycle Phase 1 (Chặng 1A, additive) — dùng cho Archive/Purge ở Chặng 4/5 ───
+    /** Vòng đời tài nguyên; lưu STRING vào VARCHAR(30), default ACTIVE cho row cũ. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "lifecycle_status", length = 30, columnDefinition = "varchar(30) default 'ACTIVE'")
+    @Builder.Default
+    LifecycleStatus lifecycleStatus = LifecycleStatus.ACTIVE;
+
+    @Column(name = "archived_reason", length = 255)
+    String archivedReason;
+
+    @Column(name = "archived_at")
+    java.time.LocalDateTime archivedAt;
+
+    @Column(name = "purge_at")
+    java.time.LocalDateTime purgeAt;
 }

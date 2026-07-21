@@ -34,4 +34,19 @@ public class Subscription extends BaseEntity {
 
     @Column(name = "end_date")
     LocalDateTime endDate;
+
+    // ─── Subscription Phase 1 (Chặng 1A, additive nullable) — snapshot quyền lợi lúc mua ───
+    /** Giá đã trả cho kỳ này (snapshot, không đọc live catalog) — dùng cho proration & MRR. */
+    @Column(name = "billing_price_snapshot", precision = 18, scale = 2)
+    java.math.BigDecimal billingPriceSnapshot;
+
+    @Column(name = "currency_snapshot", length = 10)
+    String currencySnapshot;
+
+    @Column(name = "billing_cycle_snapshot", length = 20)
+    String billingCycleSnapshot;
+
+    /** Nominal AI quota của gói lúc mua (snapshot) — nền cho tính delta khi upgrade. */
+    @Column(name = "nominal_ai_limit_snapshot")
+    Integer nominalAiLimitSnapshot;
 }

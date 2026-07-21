@@ -84,6 +84,13 @@ public class DataInitializer implements CommandLineRunner {
         // 4. Backfill profile_completed for rows created before the column existed.
         backfillProfileCompleted();
 
+        // 4b. Heal user_quota rows stuck at the old "never reset" sentinel (9999-12-31 / LocalDateTime.MAX),
+        //     which the sync logic can never expire on its own → they would display forever.
+        backfillQuotaResetAt();
+
+        // 4c. Seed tier_order + quota_period_days cho 4 gói mẫu (Chặng 1A/1C). Idempotent (chỉ set khi null).
+        backfillPlanTierAndPeriod();
+
         // 5. Workspace file tree: backfill sheets.diagram_type + one root DIAGRAM item per sheet.
         backfillWorkspaceItems();
 
@@ -284,6 +291,46 @@ public class DataInitializer implements CommandLineRunner {
         });
         userRepository.saveAll(pending);
         log.info("Backfilled profile_completed for {} existing user(s).", pending.size());
+    }
+
+    /**
+     * Idempotent seed cho Subscription Phase 1: gán {@code tier_order} (Free=0 … Pro=3) và
+     * {@code quota_period_days=30} cho 4 gói mẫu (UUID cố định). Chỉ set khi đang null → admin sửa tay
+     * được giữ nguyên, chạy lại 0 dòng. Cần cho luồng upgrade/quote so bậc gói (Chặng 1C).
+     */
+    private void backfillPlanTierAndPeriod() {
+        setTier("11111111-1111-1111-1111-111111111111", 0); // Free
+        setTier("22222222-2222-2222-2222-222222222222", 1); // Education
+        setTier("33333333-3333-3333-3333-333333333333", 2); // Standard
+        setTier("44444444-4444-4444-4444-444444444444", 3); // Pro
+        int period = jdbcTemplate.update(
+                "UPDATE plans SET quota_period_days = 30 WHERE quota_period_days IS NULL");
+        if (period > 0) {
+            log.info("Backfilled quota_period_days=30 for {} plan(s).", period);
+        }
+    }
+
+    private void setTier(String planId, int tier) {
+        jdbcTemplate.update(
+                "UPDATE plans SET tier_order = ? WHERE id = ? AND tier_order IS NULL",
+                tier, UUID.fromString(planId));
+    }
+
+    /**
+     * One-time, idempotent heal for {@code user_quota.reset_at} rows written by the old free/permanent-plan
+     * code, which used a far-future sentinel ({@code 9999-12-31} or {@link java.time.LocalDateTime#MAX}).
+     * Such rows never "expire" (their reset_at is always in the future), so {@code syncQuotaToCurrentPlan}
+     * can never re-snapshot them — they'd show up forever on the UI. Reset them to a real rolling period
+     * ({@code now + 30 days}); the service recomputes the exact value on the next quota access. Idempotent:
+     * once fixed, no row matches the far-future threshold, so reruns update 0 rows.
+     */
+    private void backfillQuotaResetAt() {
+        int fixed = jdbcTemplate.update(
+                "UPDATE user_quota SET reset_at = now() + interval '30 days', updated_at = now() "
+                        + "WHERE reset_at >= TIMESTAMP '9000-01-01 00:00:00'");
+        if (fixed > 0) {
+            log.info("Backfilled reset_at for {} user_quota row(s) stuck at the old never-reset sentinel.", fixed);
+        }
     }
 
     /**
