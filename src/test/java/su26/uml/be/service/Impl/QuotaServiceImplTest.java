@@ -183,7 +183,7 @@ class QuotaServiceImplTest {
         assertEquals(0, quota.getAiUsed());
         assertEquals(10, quota.getAiLimit());
         assertNull(quota.getSubscriptionId());
-        assertEquals(LocalDateTime.MAX, quota.getResetAt());
+        assertEquals(QuotaServiceImpl.NEVER_RESET, quota.getResetAt());
         verify(userQuotaRepository).save(quota);
     }
 
@@ -255,7 +255,7 @@ class QuotaServiceImplTest {
 
         assertEquals(10, saved.getAiLimit());
         assertNull(saved.getSubscriptionId());
-        assertEquals(LocalDateTime.MAX, saved.getResetAt());
+        assertEquals(QuotaServiceImpl.NEVER_RESET, saved.getResetAt());
     }
 
     // ─── resetOnPlanChange: after payment → resets ───
