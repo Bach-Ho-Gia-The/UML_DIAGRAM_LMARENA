@@ -60,6 +60,8 @@ class QuotaServiceImplTest {
     @BeforeEach
     void setUp() {
         service = new QuotaServiceImpl(userQuotaRepository, subscriptionRepository, planRepository, userRepository);
+        // @Value không được inject trong unit test thuần → set thủ công.
+        org.springframework.test.util.ReflectionTestUtils.setField(service, "periodDays", 30);
 
         proPlan = Plan.builder()
                 .id(planId)
@@ -106,6 +108,13 @@ class QuotaServiceImplTest {
 
     private LocalDateTime now() {
         return LocalDateTime.now();
+    }
+
+    /** resetAt của gói Free phải nằm trong [before+30d, after+30d] (reset lăn 30 ngày). */
+    private void assertResetAtRoughly30DaysFromNow(LocalDateTime resetAt, LocalDateTime before, LocalDateTime after) {
+        assertNotNull(resetAt);
+        assertFalse(resetAt.isBefore(before.plusDays(30)), "resetAt phải >= before+30d");
+        assertFalse(resetAt.isAfter(after.plusDays(30)), "resetAt phải <= after+30d");
     }
 
     // ─── syncQuotaToCurrentPlan: subId unchanged, resetAt future → no reset ───
@@ -178,12 +187,15 @@ class QuotaServiceImplTest {
                 .thenReturn(Optional.of(freePlan));
         when(userQuotaRepository.tryReserveAi(userId)).thenReturn(1);
 
+        LocalDateTime before = now();
         service.reserveAiRequest(userId);
+        LocalDateTime after = now();
 
         assertEquals(0, quota.getAiUsed());
         assertEquals(10, quota.getAiLimit());
         assertNull(quota.getSubscriptionId());
-        assertEquals(QuotaServiceImpl.NEVER_RESET, quota.getResetAt());
+        // Gói Free (không có sub) → reset lăn 30 ngày kể từ bây giờ.
+        assertResetAtRoughly30DaysFromNow(quota.getResetAt(), before, after);
         verify(userQuotaRepository).save(quota);
     }
 
@@ -247,7 +259,9 @@ class QuotaServiceImplTest {
                 .thenReturn(Optional.of(freePlan));
         when(userQuotaRepository.save(any())).thenAnswer(i -> i.getArgument(0));
 
+        LocalDateTime before = now();
         service.getQuota(userId);
+        LocalDateTime after = now();
 
         var captor = ArgumentCaptor.forClass(UserQuota.class);
         verify(userQuotaRepository).save(captor.capture());
@@ -255,7 +269,8 @@ class QuotaServiceImplTest {
 
         assertEquals(10, saved.getAiLimit());
         assertNull(saved.getSubscriptionId());
-        assertEquals(QuotaServiceImpl.NEVER_RESET, saved.getResetAt());
+        // Gói Free (không có sub) → reset lăn 30 ngày kể từ bây giờ.
+        assertResetAtRoughly30DaysFromNow(saved.getResetAt(), before, after);
     }
 
     // ─── resetOnPlanChange: after payment → resets ───
