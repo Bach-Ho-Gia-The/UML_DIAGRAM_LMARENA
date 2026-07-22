@@ -16,6 +16,7 @@ import su26.uml.be.exception.AppException;
 import su26.uml.be.exception.ErrorCode;
 import su26.uml.be.repository.PlanRepository;
 import su26.uml.be.repository.SubscriptionRepository;
+import su26.uml.be.repository.UserRepository;
 import su26.uml.be.service.PlanLimitService;
 
 import java.time.LocalDateTime;
@@ -29,10 +30,14 @@ public class PlanLimitServiceImpl implements PlanLimitService {
 
     SubscriptionRepository subscriptionRepository;
     PlanRepository planRepository;
+    UserRepository userRepository;
 
     @Override
     @Transactional(readOnly = true)
     public void assertCanCreate(UUID userId, PlanFeatureKey key, long currentCount) {
+        if (isAdmin(userId)) {
+            return; // Admin: không gắn gói, capacity luôn unlimited.
+        }
         int limit = limitOf(currentPlan(userId), key);
         if (limit == -1) {
             return; // unlimited
@@ -41,6 +46,13 @@ public class PlanLimitServiceImpl implements PlanLimitService {
         if (currentCount >= limit) {
             throw new AppException(ErrorCode.PLAN_LIMIT_EXCEEDED);
         }
+    }
+
+    /** Admin không gắn gói, luôn được hạn mức cao nhất (unlimited) — nhận diện bằng role. */
+    private boolean isAdmin(UUID userId) {
+        return userRepository.findById(userId)
+                .map(u -> u.getRole() != null && "ADMIN".equalsIgnoreCase(u.getRole().getRoleName()))
+                .orElse(false);
     }
 
     /** Gói hiện tại: subscription ACTIVE (chưa hết hạn) → gói; nếu không có → gói ACTIVE giá thấp nhất. */

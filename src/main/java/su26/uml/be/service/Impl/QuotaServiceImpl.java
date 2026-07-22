@@ -44,6 +44,9 @@ public class QuotaServiceImpl implements QuotaService {
     @Override
     @Transactional
     public void reserveAiRequest(UUID userId) {
+        if (isAdmin(userId)) {
+            return; // Admin: không gắn gói, luôn unlimited — không trừ, không chặn.
+        }
         UserQuota q = getOrCreate(userId);
         syncQuotaToCurrentPlan(q, userId);
         // Atomic: chỉ trừ khi còn quota (hoặc unlimited). flushAutomatically đẩy sync xuống DB trước.
@@ -56,12 +59,21 @@ public class QuotaServiceImpl implements QuotaService {
     @Override
     @Transactional
     public void rollbackAiRequest(UUID userId) {
+        if (isAdmin(userId)) {
+            return;
+        }
         userQuotaRepository.rollbackAi(userId);
     }
 
     @Override
     @Transactional
     public QuotaResponse getQuota(UUID userId) {
+        if (isAdmin(userId)) {
+            // Admin: unlimited (-1), không gắn gói.
+            return QuotaResponse.builder()
+                    .used(0).limit(-1).nominalLimit(-1).effectiveLimit(-1)
+                    .build();
+        }
         UserQuota q = getOrCreate(userId);
         syncQuotaToCurrentPlan(q, userId);
         return QuotaResponse.builder()
@@ -110,6 +122,13 @@ public class QuotaServiceImpl implements QuotaService {
     }
 
     // --- helpers ---
+
+    /** Admin không gắn gói, luôn được hạn mức cao nhất (unlimited) — nhận diện bằng role. */
+    private boolean isAdmin(UUID userId) {
+        return userRepository.findById(userId)
+                .map(u -> u.getRole() != null && "ADMIN".equalsIgnoreCase(u.getRole().getRoleName()))
+                .orElse(false);
+    }
 
     private UserQuota getOrCreate(UUID userId) {
         return userQuotaRepository.findByUserId(userId).orElseGet(() -> {
