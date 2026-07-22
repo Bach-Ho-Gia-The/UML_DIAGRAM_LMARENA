@@ -18,6 +18,14 @@ public interface SheetMapper {
     @Mapping(target = "id", ignore = true)
     @Mapping(target = "createdAt", ignore = true)
     @Mapping(target = "updatedAt", ignore = true)
+    // FIX: Sheet + Project cùng có lifecycleStatus/archivedAt/purgeAt (thêm ở commit 8153c63).
+    // MapStruct 1.5.5 ưu tiên nested-map (project.lifecycleStatus → sheet.lifecycleStatus) và BỎ QUÊN
+    // gán sheet.project = project → project_id null → NOT NULL violation → tạo project/diagram gãy.
+    // Ép gán project trực tiếp + ignore 3 field lifecycle (sheet mới mặc định ACTIVE theo @Builder.Default).
+    @Mapping(target = "project", source = "project")
+    @Mapping(target = "lifecycleStatus", ignore = true)
+    @Mapping(target = "archivedAt", ignore = true)
+    @Mapping(target = "purgeAt", ignore = true)
     Sheet toSheet(String name, Integer orderIndex, String diagramData, String diagramType, Project project);
 
     @Mapping(target = "projectId", source = "project.id")
