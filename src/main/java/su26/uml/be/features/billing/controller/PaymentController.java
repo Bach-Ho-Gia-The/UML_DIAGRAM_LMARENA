@@ -1,0 +1,64 @@
+package su26.uml.be.features.billing.controller;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.*;
+import su26.uml.be.features.billing.dto.PaymentRequest;
+import su26.uml.be.features.billing.dto.PaymentResponse;
+import su26.uml.be.features.billing.dto.PaymentStatusResponse;
+import su26.uml.be.common.response.ApiResponse;
+import su26.uml.be.features.user.entity.User;
+import su26.uml.be.common.exception.AppException;
+import su26.uml.be.common.exception.ErrorCode;
+import su26.uml.be.features.user.repository.UserRepository;
+import su26.uml.be.features.billing.service.PaymentService;
+import su26.uml.be.features.subscription.service.UpgradePaymentService;
+import vn.payos.PayOS;
+import vn.payos.model.webhooks.WebhookData;
+
+@RestController
+@RequestMapping("/payments")
+@RequiredArgsConstructor
+@Slf4j
+public class PaymentController {
+
+    private final PaymentService paymentService;
+    private final UpgradePaymentService upgradePaymentService;
+    private final PayOS payOS;
+    private final UserRepository userRepository;
+
+    @PostMapping("/create")
+    public ResponseEntity<ApiResponse<PaymentResponse>> createPaymentLink(
+            @AuthenticationPrincipal UserDetails userDetails,
+            @RequestBody PaymentRequest request) {
+        if (userDetails == null) {
+            throw new AppException(ErrorCode.UNAUTHENTICATED);
+        }
+        User user = userRepository.findByEmail(userDetails.getUsername())
+                .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
+        PaymentResponse response = upgradePaymentService.createIntentPayment(user, request.getPlanId(), request.getReturnUrl(), request.getCancelUrl(), request.getUpgradeMode());
+        return ResponseEntity.ok(ApiResponse.success("Tạo link thanh toán thành công", response));
+    }
+
+    @GetMapping("/status/{orderCode}")
+    public ResponseEntity<ApiResponse<PaymentStatusResponse>> getPaymentStatus(
+            @PathVariable Long orderCode) {
+        PaymentStatusResponse response = paymentService.getPaymentStatus(orderCode);
+        return ResponseEntity.ok(ApiResponse.success("Lấy trạng thái thanh toán thành công", response));
+    }
+
+    @PostMapping("/webhook")
+    public ResponseEntity<String> handleWebhook(@RequestBody Object webhookBody) {
+        try {
+            WebhookData webhookData = payOS.webhooks().verify(webhookBody);
+            paymentService.processWebhook(webhookData);
+            return ResponseEntity.ok("success");
+        } catch (Exception e) {
+            log.error("Webhook verification failed", e);
+            return ResponseEntity.badRequest().body("Invalid webhook");
+        }
+    }
+}

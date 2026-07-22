@@ -9,24 +9,24 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import su26.uml.be.entity.FeatureCatalog;
-import su26.uml.be.entity.Role;
-import su26.uml.be.entity.Plan;
-import su26.uml.be.entity.Sheet;
-import su26.uml.be.entity.Subscription;
-import su26.uml.be.entity.User;
-import su26.uml.be.entity.WorkspaceItem;
-import su26.uml.be.enums.PlanFeatureKey;
-import su26.uml.be.enums.SubscriptionStatus;
-import su26.uml.be.enums.UserStatus;
-import su26.uml.be.mapper.WorkspaceItemMapper;
-import su26.uml.be.repository.FeatureCatalogRepository;
-import su26.uml.be.repository.RoleRepository;
-import su26.uml.be.repository.PlanRepository;
-import su26.uml.be.repository.SheetRepository;
-import su26.uml.be.repository.UserRepository;
-import su26.uml.be.repository.SubscriptionRepository;
-import su26.uml.be.repository.WorkspaceItemRepository;
+import su26.uml.be.features.plan.entity.FeatureCatalog;
+import su26.uml.be.features.user.entity.Role;
+import su26.uml.be.features.plan.entity.Plan;
+import su26.uml.be.features.project.entity.Sheet;
+import su26.uml.be.features.subscription.entity.Subscription;
+import su26.uml.be.features.user.entity.User;
+import su26.uml.be.features.workspace.entity.WorkspaceItem;
+import su26.uml.be.common.constant.enums.PlanFeatureKey;
+import su26.uml.be.common.constant.enums.SubscriptionStatus;
+import su26.uml.be.common.constant.enums.UserStatus;
+import su26.uml.be.features.workspace.mapper.WorkspaceItemMapper;
+import su26.uml.be.features.plan.repository.FeatureCatalogRepository;
+import su26.uml.be.features.user.repository.RoleRepository;
+import su26.uml.be.features.plan.repository.PlanRepository;
+import su26.uml.be.features.project.repository.SheetRepository;
+import su26.uml.be.features.user.repository.UserRepository;
+import su26.uml.be.features.subscription.repository.SubscriptionRepository;
+import su26.uml.be.features.workspace.repository.WorkspaceItemRepository;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -65,7 +65,7 @@ public class DataInitializer implements CommandLineRunner {
 
         // 0. Ensure the ShedLock coordination table exists. It is NOT a JPA entity, so
         //    ddl-auto=update never creates it, and the JdbcTemplate lock provider does not
-        //    self-create schema — without this the scheduled jobs fail with
+        //    self-create schema... without this the scheduled jobs fail with
         //    "relation \"shedlock\" does not exist".
         initShedLockTable();
 
@@ -82,24 +82,24 @@ public class DataInitializer implements CommandLineRunner {
         // 3b. Initialize starter feature catalog (admin can add/edit/delete afterwards).
         initFeatureCatalog();
 
-        // 3c. Seed quota limits (plan_features) + rate limits for the seed plans (idempotent —
-        //     ON CONFLICT DO NOTHING for limits, only-if-null for rate limits → admin edits preserved).
+        // 3c. Seed quota limits (plan_features) + rate limits for the seed plans (idempotent...
+        //     ON CONFLICT DO NOTHING for limits, only-if-null for rate limits - admin edits preserved).
         seedPlanQuotasAndRateLimits();
 
         // 4. Backfill profile_completed for rows created before the column existed.
         backfillProfileCompleted();
 
         // 4b. Heal user_quota rows stuck at the old "never reset" sentinel (9999-12-31 / LocalDateTime.MAX),
-        //     which the sync logic can never expire on its own → they would display forever.
+        //     which the sync logic can never expire on its own - they would display forever.
         backfillQuotaResetAt();
 
-        // 4c. Seed tier_order + quota_period_days cho 4 gói mẫu (Chặng 1A/1C). Idempotent (chỉ set khi null).
+        // 4c. Seed tier_order + quota_period_days for 4 sample plans (Phase 1A/1C). Idempotent (only set when null).
         backfillPlanTierAndPeriod();
 
-        // 4d. Đánh dấu gói Free (UUID cố định) là base plan.
+        // 4d. Mark Free plan (fixed UUID) as base plan.
         backfillBasePlan();
 
-        // 4e. Tạo user test upgrade (Standard plan, 15 ngày còn lại).
+        // 4e. Create test upgrade user (Standard plan, 15 days remaining).
         seedUpgradeTestUser();
 
         // 5. Workspace file tree: backfill sheets.diagram_type + one root DIAGRAM item per sheet.
@@ -283,7 +283,7 @@ public class DataInitializer implements CommandLineRunner {
 
     /**
      * One-time backfill: rows that predate the {@code profile_completed} column come back as null.
-     * Onboarding is a new feature, so no existing Google user has ever completed it — key on the
+     * Onboarding is a new feature, so no existing Google user has ever completed it - key on the
      * provider, not the password (the password is unreliable: fresh Google users may carry a random
      * BCrypt hash). A Google user becomes "completed" only once they have changed their own password
      * (onboarding/OTP reset sets {@code lastPasswordChangeAt}); everyone else (normal register) is
@@ -305,9 +305,9 @@ public class DataInitializer implements CommandLineRunner {
     }
 
     /**
-     * Idempotent seed cho Subscription Phase 1: gán {@code tier_order} (Free=0 … Pro=3) và
-     * {@code quota_period_days=30} cho 4 gói mẫu (UUID cố định). Chỉ set khi đang null → admin sửa tay
-     * được giữ nguyên, chạy lại 0 dòng. Cần cho luồng upgrade/quote so bậc gói (Chặng 1C).
+     * Idempotent seed for Subscription Phase 1: assign {tier_order} (Free=0 thru Pro=3) and
+     * {quota_period_days=30} for 4 fixed-UUID sample plans. Only set when null - admin manual edits
+     * are preserved, leaving 0 untouched. Needed for upgrade/quota rough-estimate flow (Phase 1C).
      */
     private void backfillPlanTierAndPeriod() {
         setTier("11111111-1111-1111-1111-111111111111", 0); // Free
@@ -341,7 +341,7 @@ public class DataInitializer implements CommandLineRunner {
      * One-time, idempotent heal for {@code user_quota.reset_at} rows written by the old free/permanent-plan
      * code, which used a far-future sentinel ({@code 9999-12-31} or {@link java.time.LocalDateTime#MAX}).
      * Such rows never "expire" (their reset_at is always in the future), so {@code syncQuotaToCurrentPlan}
-     * can never re-snapshot them — they'd show up forever on the UI. Reset them to a real rolling period
+     * can never re-snapshot them - they'd show up forever on the UI. Reset them to a real rolling period
      * ({@code now + 30 days}); the service recomputes the exact value on the next quota access. Idempotent:
      * once fixed, no row matches the far-future threshold, so reruns update 0 rows.
      */
@@ -358,7 +358,7 @@ public class DataInitializer implements CommandLineRunner {
      * Idempotent backfill for the workspace file tree feature:
      * (1) sheets created before the {@code diagram_type} column get it derived from their
      *     diagramData JSON (fallback "activity" when absent/invalid);
-     * (2) every sheet without a workspace item gets exactly one root DIAGRAM item — the unique
+     * (2) every sheet without a workspace item gets exactly one root DIAGRAM item - the unique
      *     index on {@code workspace_items.sheet_id} guarantees reruns never create duplicates.
      *     Duplicate root names within a project are resolved with a deterministic suffix "(2)", "(3)"...
      */
@@ -379,7 +379,7 @@ public class DataInitializer implements CommandLineRunner {
             log.info("Backfilled diagram_type for {} sheet(s).", typeChanged.size());
         }
 
-        // (2) root DIAGRAM item per sheet — track root names/counts per project for dedupe/orderIndex
+        // (2) root DIAGRAM item per sheet - track root names/counts per project for dedupe/orderIndex
         Map<UUID, Set<String>> rootNamesByProject = new HashMap<>();
         Map<UUID, Integer> rootCountByProject = new HashMap<>();
         for (WorkspaceItem item : workspaceItemRepository.findAll()) {

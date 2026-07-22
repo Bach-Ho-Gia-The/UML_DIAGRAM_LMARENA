@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DiaUML Studio — Admin Dashboard (After Planning)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    .scroll-slim::-webkit-scrollbar { width: 5px; }
+    .scroll-slim::-webkit-scrollbar-track { background: transparent; }
+    .scroll-slim::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+    .animate-fade-up { animation: fadeUp 0.5s ease-out forwards; opacity: 0; }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    .animate-pulse-soft { animation: softPulse 2s ease-in-out infinite; }
+    @keyframes softPulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .glass { background: rgba(255,255,255,0.85); backdrop-filter: blur(20px); }
+    .sparkline { stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .sparkline-fill { fill: currentColor; opacity: 0.1; }
+    .notification-dropdown { transform-origin: top right; transition: all 0.2s ease; }
+    .notification-dropdown.hidden { opacity: 0; transform: scale(0.95); pointer-events: none; }
+    .sse-indicator { animation: ssePulse 1.5s ease-in-out infinite; }
+    @keyframes ssePulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 50% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); } }
+  </style>
+</head>
+<body class="bg-[#fafafa] text-slate-900 min-h-screen">
+
+<!-- ========== SIDEBAR ========== -->
+<aside id="sidebar" class="fixed inset-y-0 left-0 z-50 w-[256px] border-r border-slate-200 bg-white flex flex-col transition-all duration-300">
+  <!-- Logo -->
+  <div class="flex items-center justify-between px-4 pb-4 pt-5">
+    <a href="#" class="flex items-center gap-2.5">
+      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-900">
+        <svg viewBox="0 0 24 24" class="h-5 w-5 text-white" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/>
+          <rect x="14" y="13" width="7" height="8" rx="1.5"/><path d="M6.5 10v4M6.5 14H14M10 6.5h4" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="leading-tight">
+        <p class="text-[14px] font-semibold tracking-tight text-slate-900">DiaUML Studio</p>
+        <p class="text-[11px] text-slate-400">Admin Console</p>
+      </div>
+    </a>
+  </div>
+
+  <!-- Nav -->
+  <nav class="flex-1 px-3 pb-4 space-y-5 overflow-y-auto scroll-slim">
+    <!-- Overview -->
+    <div>
+      <p class="mb-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Overview</p>
+      <div class="space-y-0.5">
+        <button onclick="switchTab('dashboard')" id="nav-dashboard" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-[13.5px] font-medium transition bg-slate-900 text-white">
+          <svg class="h-[17px] w-[17px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 迫 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/></svg>
+          <span>Dashboard</span>
+        </button>
+      </div>
+    </div>
+    <!-- Management -->
+    <div>
+      <p class="mb-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Management</p>
+      <div class="space-y-0.5">
+        <button onclick="switchTab('users')" id="nav-users" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-[13.5px] font-medium transition text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+          <svg class="h-[17px] w-[17px] text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.252.63 8.991 8.991 0 01-12.636 0 9.38 9.38 0 002.252-.63m9 0a3 3 0 00-3-3m0 0a3 3 0 01-3-3m3 3a3 3 0 01-3 3m0 0v.008M9 12.75a3 3 0 00-3-3m0 0a3 3 0 01-3-3m3 3a3 3 0 01-3 3m0 0v.008"/></svg>
+          <span>Người dùng</span>
+        </button>
+        <button onclick="switchTab('projects')" id="nav-projects" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-[13.5px] font-medium transition text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+          <svg class="h-[17px] w-[17px] text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.776l-1.12-.053a2.251 2.251 0 00-1.88.357L7.5 4.5l-.707.354a2.25 2.25 0 01-1.768.293l-1.293-.293A2.25 2.25 0 012.25 7.207v9.043a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V7.207a2.25 2.25 0 00-1.768-2.293l-1.293-.293a2.25 2.25 0 01-1.768-.293L16.5 4.5l-1.12-.053a2.251 2.251 0 00-1.88.357L12 5.25l-1.5-.75a2.251 2.251 0 00-1.88-.357z"/></svg>
+          <span>Dự án</span>
+        </button>
+      </div>
+    </div>
+    <!-- Intelligence -->
+    <div>
+      <p class="mb-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Intelligence</p>
+      <div class="space-y-0.5">
+        <button onclick="switchTab('intelligence')" id="nav-intelligence" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-[13.5px] font-medium transition text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+          <svg class="h-[17px] w-[17px] text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 1.5l.259 1.035a3.375 3.375 0 002.456 2.455L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z"/></svg>
+          <span>AI Engine</span>
+        </button>
+      </div>
+    </div>
+    <!-- Operation -->
+    <div>
+      <p class="mb-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Operation</p>
+      <div class="space-y-0.5">
+        <button onclick="switchTab('subscription')" id="nav-subscription" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-[13.5px] font-medium transition text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+          <svg class="h-[17px] w-[17px] text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h16.5m-16.5 1.5h16.5m-1.5-12.75H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+          <span>Gói Subscription</span>
+        </button>
+      </div>
+    </div>
+    <!-- System -->
+    <div>
+      <p class="mb-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">System</p>
+      <div class="space-y-0.5">
+        <button onclick="switchTab('audit')" id="nav-audit" class="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-[13.5px] font-medium transition text-slate-600 hover:bg-slate-100 hover:text-slate-900">
+          <svg class="h-[17px] w-[17px] text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-.75m-3.75 1.5h7.5m-7.5 1.5h7.5m-7.5 1.5h7.5m-7.5 1.5h7.5M6 18.75h12a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v10.5A2.25 2.25 0 006 18.75z"/(-->
+          <span>Nhật ký hệ thống</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- AI Engine Status -->
+  <div class="border-t border-slate-200 p-3">
+    <button class="w-full rounded-lg border border-slate-200 p-3 text-left hover:border-slate-300 hover:bg-slate-50 transition">
+      <div class="flex items-center justify-between">
+        <span class="inline-flex items-center gap-1.5 text-[12.5px] font-semibold text-slate-800">
+          <svg class="h-3.5 w-3.5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg> AI Engine
+        </span>
+        <span class="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-600">
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse-soft sse-indicator"></span> Online
+        </span>
+      </div>
+      <p class="mt-1.5 truncate font-mono text-[10.5px] text-slate-400">localhost:3001/api</p>
+    </button>
+  </div>
+
+  <!-- Back to home -->
+  <div class="border-t border-slate-200 px-3 py-2">
+    <a href="#" class="flex items-center gap-2 px-2.5 py-2 rounded-lg text-[13px] font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition">
+      <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/></svg>
+      <span>Về trang chủ</span>
+    </a>
+  </div>
+
+  <!-- User -->
+  <div class="border-t border-slate-200 p-3">
+    <div class="flex items-center gap-2.5">
+      <span class="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[12px] font-semibold text-white">NA</span>
+      <div class="min-w-0 flex-1 leading-tight">
+        <p class="truncate text-[13px] font-medium text-slate-900">Nguyễn Minh Anh</p>
+        <p class="truncate text-[11px] text-slate-400">Admin</p>
+      </div>
+      <button class="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2 edgy-2.37a1.724 1.724 0 002.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      </button>
+      <button class="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600">
+        <svg class="h-[15px] w-[15px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9"/></svg>
+      </button>
+    </div>
+  </div>
+</aside>
+
+<!-- ========== MAIN CONTENT ========== -->
+<main class="ml-[256px] min-h-screen flex flex-col">
+
+  <!-- Topbar -->
+  <header class="sticky top-0 z-30 border-b border-slate-200 glass">
+    <div class="flex items-center gap-3 px-6 py-3">
+      <div class="min-w-0">
+        <h1 class="truncate text-[19px] font-semibold tracking-tight text-slate-900">Tổng quan hệ thống</h1>
+        <div class="mt-0.5 flex items-center gap-1.5 text-[12px] text-slate-400">
+          <span>Console</span><span class="text-slate-300">/</span><span class="font-medium text-slate-500">Dashboard</span>
+        </div>
+      </div>
+      <div class="ml-auto hidden flex-1 justify-center md:flex">
+        <label class="relative flex w-full max-w-sm items-center">
+          <svg class="pointer-events-none absolute left-3 h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 1010.5 16.5a7.5 7.5 0 005.197-5.197z"/></svg>
+          <input placeholder="Tìm người dùng, dự án, workspace…" class="w-full rounded-lg border border-slate-200 bg-slate-50 py-2 pl-9 pr-16 text-[13px] text-slate-700 outline-none transition focus:border-indigo-300 focus:bg-white focus:ring-4 focus:ring-indigo-100"/>
+          <kbd class="absolute right-2.5 rounded border border-slate-200 bg-white px-1.5 py-0.5 font-mono text-[10px] text-slate-400">⌘K</kbd>
+        </label>
+      </div>
+      <div class="ml-auto flex items-center gap-2 md:ml-0">
+        <span class="hidden text-[13px] font-medium text-slate-600 md:inline">Nguyễn Minh Anh</span>
+        <!-- Notification Bell with Dropdown -->
+        <div class="relative">
+          <button onclick="toggleNotifications()" class="relative rounded-lg border border-slate-200 bg-white p-2 text-slate-600 transition hover:bg-slate-50">
+            <svg class="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/></svg>
+            <span id="notif-badge" class="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-rose-500 ring-2 ring-white"></span>
+          </button>
+          <!-- Notification Dropdown -->
+          <div id="notif-dropdown" class="notification-dropdown hidden absolute right-0 mt-2 w-[360px] rounded-xl border border-slate-200 bg-white shadow-xl z-50">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+              <h3 class="text-[14px] font-semibold text-slate-900">Thông báo</h3>
+              <span class="text-[12px] text-slate-400">3 chưa đọc</span>
+            </div>
+            <div class="max-h-[400px] overflow-y-auto">
+              <!-- CRITICAL: Cost Spike -->
+              <div class="flex gap-3 px-4 py-3 border-b border-slate-50 hover:bg-slate-50 cursor-pointer transition">
+                <div class="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-rose-500 mt-2"></div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-[13px] font-medium text-slate-900">Cost Spike Detected</p>
+                  <p class="text-[12px] text-slate-500 mt-0.5">Chi phí AI vượt 200% baseline — Groq usage tăng đột biến</p>
+                  <p class="text-[11px] text-slate-400 mt-1">2 phút trước</p>
+                </div>
+              </div>
+              <!-- WARNING: High Error Rate -->
+              <div class="flex gap-3 px-4 py-3 border-b border-slate-50 hover:bg-slate-50 cursor-pointer transition">
+                <div class="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-amber-500 mt-2"></div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-[13px] font-medium text-slate-900">High Error Rate</p>
+                  <p class="text-[12px] text-slate-500 mt-0.5">Syntax error rate > 15% trong giờ qua</p>
+                  <p class="text-[11px] text-slate-400 mt-1">15 phút trước</p>
+                </div>
+              </div>
+              <!-- INFO: New Subscription -->
+              <div class="flex gap-3 px-4 py-3 border-b border-slate-50 hover:bg-slate-50 cursor-pointer transition">
+                <div class="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-blue-500 mt-2"></div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-[13px] font-medium text-slate-900">New Subscription</p>
+                  <p class="text-[12px] text-slate-500 mt-0.5">User <b>tranquocbao@uml.studio</b> đã nâng cấp lên Pro</p>
+                  <p class="text-[11px] text-slate-400 mt-1">1 giờ trước</p>
+                </div>
+              </div>
+              <!-- INFO: AI Engine -->
+              <div class="flex gap-3 px-4 py-3 hover:bg-slate-50 cursor-pointer transition">
+                <div class="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-emerald-500 mt-2"></div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-[13px] font-medium text-slate-900">AI Engine Restored</p>
+                  <p class="text-[12px] text-slate-500 mt-0.5">Ollama service đã hoạt động trở lại sau 45s downtime</p>
+                  <p class="text-[11px] text-slate-400 mt-1">3 giờ trước</p>
+                </div>
+              </div>
+            </div>
+            <div class="px-4 py-2 border-t border-slate-100">
+              <button class="text-[13px] font-medium text-indigo-600 hover:text-indigo-700">Xem tất cả thông báo</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ========== DASHBOARD CONTENT ========== -->
+  <div class="flex-1 overflow-y-auto scroll-slim px-6 pb-6 pt-4">
+    <div class="mx-auto max-w-[1400px] space-y-5">
+
+      <!-- Welcome + AI Prompt -->
+      <div class="rounded-xl border border-slate-200 bg-white p-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between animate-fade-up" style="animation-delay:0ms">
+        <div>
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 mb-2">
+            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg> Hệ thống UML · AI Agent
+          </span>
+          <h2 class="text-[22px] font-semibold tracking-tight text-slate-900">Xin chào, Nguyễn Minh Anh 👋</h2>
+          <p class="mt-1 max-w-lg text-[14px] leading-relaxed text-slate-500">
+            Có <span class="font-semibold text-slate-700">1.924 dự án</span> đang vận hành và <span class="font-semibold text-indigo-600">4 mẫu workspace</span> sẵn sàng. Yêu cầu AI phác thảo sơ đồ để bắt đầu.
+          </p>
+        </div>
+        <div class="flex w-full max-w-md items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 lg:w-auto">
+          <input placeholder="Ví dụ: Class Diagram cho Core Banking…" class="flex-1 bg-transparent px-2 text-[13.5px] text-slate-700 outline-none placeholder:text-slate-400"/>
+          <button class="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-[13px] font-medium text-white transition hover:bg-slate-700">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin"round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12z"/></svg> Sinh sơ đồ
+          </button>
+        </div>
+      </div>
+
+      <!-- Range Filter -->
+      <div class="rounded-xl border border-slate-200 bg-white p-4 flex flex-wrap items-center gap-3 animate-fade-up" style="animation-delay:50ms">
+        <svg class="h-4 w-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 11.25v7.5"/></svg>
+        <div class="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+          <button class="rounded-md bg-slate-900 px-3.5 py-1.5 text-[13px] font-medium text-white transition">24h</button>
+          <button class="rounded-md px-3.5 py-1.5 text-[13px] font-medium text-slate-600 hover:text-slate-900 transition">7 ngày</button>
+          <button class="rounded-md px-3.5 py-1.5 text-[13px] font-medium text-slate-600 hover:text-slate-900 transition">30 ngày</button>
+          <button class="rounded-md px-3.5 py-1.5 text-[13px] font-medium text-slate-600 hover:text-slate-900 transition">Tuỳ chỉnh</button>
+        </div>
+        <span class="text-[12px] text-slate-400">Cập nhật: vừa xong</span>
+        <!-- SSE Status Indicator -->
+        <div class="ml-auto flex items-center gap-2">
+          <span class="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 sse-indicator">
+            <span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> SSE Live
+          </span>
+        </div>
+      </div>
+
+      <!-- ========== STAT CARDS (8 cards — expanded from 4) ========== -->
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <!-- Users -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 animate-fade-up" style="animation-delay:100ms">
+          <div class="flex items-center justify-between">
+            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600">
+              <svg class="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.252.63 8.991 8.991 0 01-12.636 0 9.38 9.38 0 002.252-.63m9 0a3 3 0 00-3-3m0 0a3 3 0 01-3-3m3 3a3 3 0 01-3 3m0 0v.008M9 12.75a3 3 0 00-3-3m0 0a3 3 0 01-3-3m3 3a3 3 0 01-3 3m0 0v.008"/></svg>
+            </span>
+            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+              <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11 11 0 011.181-1.182l5.118-5.118a.75.75 0 011.06 1.06l-5.118 5.118a9.75 9.75 0 01-1.182 1.181l-4.306-4.306L3.75 19.5"/></svg> +12.5%
+            </span>
+          </div>
+          <p class="mt-4 text-[24px] font-semibold tracking-tight text-slate-900">2.801</p>
+          <div class="mt-1 flex items-end justify-between">
+            <p class="text-[13px] text-slate-500">Tổng người dùng</p>
+            <svg class="h-8 w-24 text-indigo-500" viewBox="0 0 120 40"><polyline points="0,35 10,30 20,32 30,25 40,28 50,20 60,22 70,15 80,18 90,10 100,12 110,5 120,8" class="sparkline"/><polygon points="0,35 10,30 20,32 30,25 40,28 50,20 60,22 70,15 80,18 90,10 100,12 110,5 120,8 120,40 0,40" class="sparkline-fill"/></svg>
+          </div>
+        </div>
+
+        <!-- Projects -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 animate-fade-up" style="animation-delay:150ms">
+          <div class="flex items-center justify-between">
+            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-50 text-sky-600">
+              <svg class="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.776l-1.12-.053a2.251 2.251 0 00-1.88.357L7.5 4.5l-.707.354a2.25 2.25 0 01-1.768.293l-1.293-.293A2.25 2.25 0 012.25 7.207v9.043a2.25 2.25 0 002.25 2.25h15a2.25 2.25 0 002.25-2.25V7.207a2.25 2.25 0 00-1.768-2.293l-1.293-.293a2.25 2.25 0 01-1.768-.293L16.5 4.5l-1.12-.053a2.251 2.251 0 00-1.88.357L12 5.25l-1.5-.75a2.251 2.251 0 00-1.88-.357z"/></svg>
+            </span>
+            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+              <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11 11 0 011.181-1.182l5.118-5.118a.75.75 0 011.06 1.06l-5.118 5.118a9.75 9.75 0 01-1.182 1.181l-4.306-4.306L3.75 19.5"/></svg> +8.3%
+            </span>
+          </div>
+          <p class="mt-4 text-[24px] font-semibold tracking-tight text-slate-900">1.924</p>
+          <div class="mt-1 flex items-end justify-between">
+            <p class="text-[13px] text-slate-500">Dự án toàn hệ thống</p>
+            <svg class="h-8 w-24 text-sky-500" viewBox="0 0 120 40"><polyline points="0,30 10,28 20,25 30,27 40,22 50,24 60,18 70,20 80,15 90,12 100,14 110,8 120,10" class="sparkline"/><polygon points="0,30 10,28 20,25 30,27 40,22 50,24 60,18 70,20 80,15 90,12 100,14 110,8 120,10 120,40 0,40" class="sparkline-fill"/></svg>
+          </div>
+        </div>
+
+        <!-- Revenue (NEW from plan) -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 animate-fade-up" style="animation-delay:200ms">
+          <div class="flex items-center justify-between">
+            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-50 text-amber-600">
+              <svg class="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182C10.55 7.72 11.275 7.5 12 7.5s1.45.22 2.003.659"/></svg>
+            </span>
+            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+              <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11 11 0 011.181-1.182l5.118-5.118a.75.75 0 011.06 1.06l-5.118 5.118a9.75 9.75 0 01-1.182 1.181l-4.306-4.306L3.75 19.5"/></svg> +23.1%
+            </span>
+          </div>
+          <p class="mt-4 text-[24px] font-semibold tracking-tight text-slate-900">42.8M ₫</p>
+          <div class="mt-1 flex items-end justify-between">
+            <p class="text-[13px] text-slate-500">Doanh thu (30 ngày)</p>
+            <svg class="h-8 w-24 text-amber-500" viewBox="0 0 120 40"><polyline points="0,35 10,32 20,28 30,30 40,25 50,22 60,18 70,20 80,15 90,12 100,10 110,8 120,5" class="sparkline"/><polygon points="0,35 10,32 20,28 30,30 40,25 50,22 60,18 70,20 80,15 90,12 100,10 110,8 120,5 120,40 0,40" class="sparkline-fill"/></svg>
+          </div>
+        </div>
+
+        <!-- MRR (NEW from plan) -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 animate-fade-up" style="animation-delay:250ms">
+          <div class="flex items-center justify-between">
+            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-50 text-emerald-600">
+              <svg class="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h16.5m-16.5 1.5h16.5m-1.5-12.75H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg>
+            </span>
+            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+              <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11 11 0 011.181-1.182l5.118-5.118a.75.75 0 011.06 1.06l-5.118 5.118a9.75 9.75 0 01-1.182 1.181l-4.306-4.306L3.75 19.5"/></svg> +5.7%
+            </span>
+          </div>
+          <p class="mt-4 text-[24px] font-semibold tracking-tight text-slate-900">38.2M ₫</p>
+          <div class="mt-1 flex items-end justify-between">
+            <p class="text-[13px] text-slate-500">MRR (Monthly Recurring)</p>
+            <svg class="h-8 w-24 text-emerald-500" viewBox="0 0 120 40"><polyline points="0,35 10,32 20,30 30,28 40,25 50,22 60,20 70,18 80,15 90,12 100,10 110,8 120,6" class="sparkline"/><polygon points="0,35 10,32 20,30 30,28 40,25 50,22 60,20 70,18 80,15 90,12 100,10 110,8 120,6 120,40 0,40" class="sparkline-fill"/></svg>
+          </div>
+        </div>
+
+        <!-- AI Requests (NEW from plan) -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 animate-fade-up" style="animation-delay:300ms">
+          <div class="flex items-center justify-between">
+            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-50 text-violet-600">
+              <svg class="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"/></svg>
+            </span>
+            <span class="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-medium text-rose-700">
+              <svg class="h-3 w-3 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11 11 0 011.181-1.182l5.118-5.118a.75.75 0 011.06 1.06l-5.118 5.118a9.75 9.75 0 01-1.182 1.181l-4.306-4.306L3.75 19.5"/></svg> -2.1%
+            </span>
+          </div>
+          <p class="mt-4 text-[24px] font-semibold tracking-tight text-slate-900">14.2K</p>
+          <div class="mt-1 flex items-end justify-between">
+            <p class="text-[13px] text-slate-500">AI Requests (30 ngày)</p>
+            <svg class="h-8 w-24 text-violet-500" viewBox="0 0 120 40"><polyline points="0,10 10,15 20,12 30,18 40,14 50,20 60,16 70,22 80,18 90,25 100,20 110,28 120,24" class="sparkline"/><polygon points="0,10 10,15 20,12 30,18 40,14 50,20 60,16 70,22 80,18 90,25 100,20 110,28 120,24 120,40 0,40" class="sparkline-fill"/></svg>
+          </div>
+        </div>
+
+        <!-- AI Tokens (NEW from plan) -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 animate-fade-up" style="animation-delay:350ms">
+          <div class="flex items-center justify-between">
+            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-fuchsia-50 text-fuchsia-600">
+              <svg class="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z"/></svg>
+            </span>
+            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+              <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11 11 0 011.181-1.182l5.118-5.118a.75.75 0 011.06 1.06l-5.118 5.118a9.75 9.75 0 01-1.182 1.181l-4.306-4.306L3.75 19.5"/></svg> +18.4%
+            </span>
+          </div>
+          <p class="mt-4 text-[24px] font-semibold tracking-tight text-slate-900">4.8M</p>
+          <div class="mt-1 flex items-end justify-between">
+            <p class="text-[13px] text-slate-500">AI Tokens consumed</p>
+            <span class="text-[11px] text-slate-400">~95% from provider</span>
+          </div>
+        </div>
+
+        <!-- AI Latency (NEW from plan) -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 animate-fade-up" style="animation-delay:400ms">
+          <div class="flex items-center justify-between">
+            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-cyan-50 text-cyan-600">
+              <svg class="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </span>
+            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+              <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11 11 0 011.181-1.182l5.118-5.118a.75.75 0 011.06 1.06l-5.118 5.118a9.75 9.75 0 01-1.182 1.181l-4.306-4.306L3.75 19.5"/></svg> -9.4%
+            </span>
+          </div>
+          <p class="mt-4 text-[24px] font-semibold tracking-tight text-slate-900">1.2s</p>
+          <div class="mt-1 flex items-end justify-between">
+            <p class="text-[13px] text-slate-500">Độ trễ AI trung bình</p>
+            <svg class="h-8 w-24 text-cyan-500" viewBox="0 0 120 40"><polyline points="0,32 10,30 20,28 30,29 40,26 50,24 60,25 70,22 80,21 90,20 100,19 110,17 120,16" class="sparkline"/><polygon points="0,32 10,30 20,28 30,29 40,26 50,24 60,25 70,22 80,21 90,20 100,19 110,17 120,16 120,40 0,40" class="sparkline-fill"/></svg>
+          </div>
+        </div>
+
+        <!-- AI Cost (NEW from plan — Cloud only) -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 transition hover:border-slate-300 animate-fade-up" style="animation-delay:450ms">
+          <div class="flex items-center justify-between">
+            <span class="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-50 text-rose-600">
+              <svg class="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182C10.55 7.72 11.275 7.5 12 7.5s1.45.22 2.003.659"/></svg>
+            </span>
+            <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+              <svg class="h-3 w-3 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11 11 0 011.181-1.182l5.118-5.118a.75.75 0 011.06 1.06l-5.118 5.118a9.75 9.75 0 01-1.182 1.181l-4.306-4.306L3.75 19.5"/></svg> +45.2%
+            </span>
+          </div>
+          <p class="mt-4 text-[24px] font-semibold tracking-tight text-slate-900">$124.50</p>
+          <div class="mt-1 flex items-end justify-between">
+            <p class="text-[13px] text-slate-500">Chi phí Cloud AI</p>
+            <span class="text-[11px] text-slate-400">Groq + OpenAI</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== CHARTS ROW 1 ========== -->
+      <div class="grid gap-4 xl:grid-cols-3">
+        <!-- Plan Usage Chart -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 xl:col-span-2 flex flex-col gap-4 animate-fade-up" style="animation-delay:500ms">
+          <div>
+            <h3 class="text-[14px] font-semibold text-slate-900">Lượt sử dụng theo gói</h3>
+            <p class="text-[13px] text-slate-500">3–12 tháng</p>
+          </div>
+          <div class="h-[250px]"><canvas id="planUsageChart"></canvas></div>
+          <div class="flex flex-wrap gap-4 text-[12px]">
+            <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-[#94a3b8]"></span><span class="text-slate-600">Free</span></span>
+            <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-[#6366f1]"></span><span class="text-slate-600">Pro</span></span>
+            <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-[#0ea5e9]"></span><span class="text-slate-600">Business</span></span>
+            <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-[#0f172a]"></span><span class="text-slate-600">Enterprise</span></span>
+          </div>
+        </div>
+
+        <!-- UML Distribution -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 animate-fade-up" style="animation-delay:550ms">
+          <h3 class="text-[14px] font-semibold text-slate-900">Phân bố loại UML</h3>
+          <p class="text-[13px] text-slate-500">Tỷ trọng sơ đồ</p>
+          <div class="mt-4 flex flex-col items-center">
+            <div class="h-[180px] w-[180px]"><canvas id="umlDonut"></canvas></div>
+            <div class="mt-4 grid w-full grid-cols-2 gap-x-3 gap-y-2">
+              <div class="flex items-center gap-2 text-[12px]"><span class="h-2.5 w-2.5 rounded-sm bg-[#6366f1]"></span><span class="flex-1 truncate text-slate-600">Class Diagram</span><span class="font-medium text-slate-900">28%</span></div>
+              <div class="flex items-center gap-2 text-[12px]"><span class="h-2.5 w-2.5 rounded-sm bg-[#0ea5e9]"></span><span class="flex-1 truncate text-slate-600">Use Case</span><span class="font-medium text-slate-900">22%</span></div>
+              <div class="flex items-center gap-2 text-[12px]"><span class="h-2.5 w-2.5 rounded-sm bg-[#8b5cf6]"></span><span class="flex-1 truncate text-slate-600">Sequence</span><span class="font-medium text-slate-900">18%</span></div>
+              <div class="flex items-center gap-2 text-[12px]"><span class="h-2.5 w-2.5 rounded-sm bg-[#f59e0b]"></span><span class="flex-1 truncate text-slate-600">Activity</span><span class="font-medium text-slate-900">14%</span></div>
+              <div class="flex items-center gap-2 text-[12px]"><span class="h-2.5 w-2.5 rounded-sm bg-[#10b981]"></span><span class="flex-1 truncate text-slate-600">ERD</span><span class="font-medium text-slate-900">10%</span></div>
+              <div class="flex items-center gap-2 text-[12px]"><span class="h-2.5 w-2.5 rounded-sm bg-[#94a3b8]"></span><span class="flex-1 truncate text-slate-600">Khác</span><span class="font-medium text-slate-900">8%</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== NEW: AI METRICS PANELS (from plan) ========== -->
+      <div class="grid gap-4 xl:grid-cols-2">
+        <!-- AI Usage & Latency (All Providers) -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 animate-fade-up" style="animation-delay:600ms">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-[14px] font-semibold text-slate-900">AI Usage & Latency</h3>
+              <p class="text-[13px] text-slate-500">Tất cả providers — Ollama, Groq, OpenAI</p>
+            </div>
+            <span class="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+              <span class="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse"></span> Real-time
+            </span>
+          </div>
+          <div class="h-[200px]"><canvas id="aiUsageChart"></canvas></div>
+          <div class="mt-3 flex flex-wrap gap-3 text-[12px]">
+            <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-[#6366f1]"></span><span class="text-slate-600">Ollama (Local)</span></span>
+            <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-[#10b981]"></span><span class="text-slate-600">Groq</span></span>
+            <span class="flex items-center gap-1.5"><span class="h-2.5 w-2.5 rounded-sm bg-[#0ea5e9]"></span><span class="text-slate-600">OpenAI</span></span>
+          </div>
+        </div>
+
+        <!-- Cloud AI Cost (Cloud Providers Only) -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 animate-fade-up" style="animation-delay:650ms">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h3 class="text-[14px] font-semibold text-slate-900">Chi phí Cloud AI</h3>
+              <p class="text-[13px] text-slate-500">Chỉ providers trả phí — Groq, OpenAI, Azure</p>
+            </div>
+            <span class="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700">
+              <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 2.188 3.374h13.625c1.972 0 3.054-1.874 2.188-3.374l-6.813-11.5a2.25 2.25 0 00-3.876 0l-6.813 11.5z"/></svg> Cost Spike Alert
+            </span>
+          </div>
+          <div class="h-[200px]"><canvas id="aiCostChart"></canvas></div>
+          <div class="mt-3 flex items-center justify-between text-[12px] text-slate-500">
+            <span>Ollama (Local): <span class="font-medium text-slate-900">$0</span></span>
+            <span class="text-amber-600 font-medium">⚠ Groq cost vượt 200% baseline</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== ACTIVITY + TOP CONTRIBUTORS ========== -->
+      <div class="grid gap-4 xl:grid-cols-3">
+        <!-- Recent Activity -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 xl:col-span-2 animate-fade-up" style="animation-delay:700ms">
+          <div class="mb-3 flex items-center justify-between">
+            <h3 class="text-[14px] font-semibold text-slate-900">Hoạt động gần đây</h3>
+            <button class="text-[13px] font-medium text-indigo-600 hover:text-indigo-700">Xem tất cả</button>
+          </div>
+          <div class="space-y-1">
+            <div class="flex items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-slate-50">
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-semibold text-white">NA</span>
+              <p class="min-w-0 flex-1 truncate text-[13px] text-slate-600"><span class="font-medium text-slate-900">Nguyễn Minh Anh</span> tạo sơ đồ Class mới trong <span class="font-medium text-indigo-600">Core Banking v3</span></p>
+              <span class="shrink-0 text-[12px] text-slate-400">2 phút trước</span>
+            </div>
+            <div class="flex items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-slate-50">
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-600 text-[11px] font-semibold text-white">AI</span>
+              <p class="min-w-0 flex-1 truncate text-[13px] text-slate-600"><span class="font-medium text-slate-900">AnythingLLM</span> đồng bộ workspace <span class="font-medium text-indigo-600">banking-sdlc</span></p>
+              <span class="shrink-0 text-[12px] text-slate-400">11 phút trước</span>
+            </div>
+            <div class="flex items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-slate-50">
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-600 text-[11px] font-semibold text-white">TB</span>
+              <p class="min-w-0 flex-1 truncate text-[13px] text-slate-600"><span class="font-medium text-slate-900">Trần Quốc Bảo</span> tải tài liệu vào <span class="font-medium text-indigo-600">E-commerce Platform</span></p>
+              <span class="shrink-0 text-[12px] text-slate-400">34 phút trước</span>
+            </div>
+            <div class="flex items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-slate-50">
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[11px] font-semibold text-white">LY</span>
+              <p class="min-w-0 flex-1 truncate text-[13px] text-slate-600"><span class="font-medium text-slate-900">Lê Hoàng Yến</span> mời 3 thành viên vào <span class="font-medium text-indigo-600">Healthcare Portal</span></p>
+              <span class="shrink-0 text-[12px] text-slate-400">1 giờ trước</span>
+            </div>
+            <div class="flex items-center gap-3 rounded-lg px-2 py-2 transition hover:bg-slate-50">
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-600 text-[11px] font-semibold text-white">PH</span>
+              <p class="min-w-0 flex-1 truncate text-[13px] text-slate-600"><span class="font-medium text-slate-900">Phạm Đức Hoàng</span> clone mẫu workspace <span class="font-medium text-indigo-600">Hospital System</span></p>
+              <span class="shrink-0 text-[12px] text-slate-400">2 giờ trước</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Top Contributors -->
+        <div class="rounded-xl border border-slate-200 bg-white p-5 animate-fade-up" style="animation-delay:750ms">
+          <h3 class="mb-3 text-[14px] font-semibold text-slate-900">Top đóng góp</h3>
+          <div class="space-y-3">
+            <div class="flex items-center gap-3">
+              <span class="w-4 text-center text-[13px] font-semibold text-slate-300">1</span>
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-[11px] font-semibold text-white">NA</span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-[13px] font-medium text-slate-800">Nguyễn Minh Anh</p>
+                <div class="mt-1 h-1.5 w-full rounded-full bg-slate-100"><div class="h-full rounded-full bg-indigo-600" style="width:100%"></div></div>
+              </div>
+              <span class="text-[13px] font-semibold text-slate-900">412</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="w-4 text-center text-[13px] font-semibold text-slate-300">2</span>
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sky-600 text-[11px] font-semibold text-white">TB</span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-[13px] font-medium text-slate-800">Trần Quốc Bảo</p>
+                <div class="mt-1 h-1.5 w-full rounded-full bg-slate-100"><div class="h-full rounded-full bg-sky-600" style="width:94%"></div></div>
+              </div>
+              <span class="text-[13px] font-semibold text-slate-900">388</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="w-4 text-center text-[13px] font-semibold text-slate-300">3</span>
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-violet-600 text-[11px] font-semibold text-white">LY</span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-[13px] font-medium text-slate-800">Lê Hoàng Yến</p>
+                <div class="mt-1 h-1.5 w-full rounded-full bg-slate-100"><div class="h-full rounded-full bg-violet-600" style="width:73%"></div></div>
+              </div>
+              <span class="text-[13px] font-semibold text-slate-900">301</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="w-4 text-center text-[13px] font-semibold text-slate-300">4</span>
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-[11px] font-semibold text-white">PH</span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-[13px] font-medium text-slate-800">Phạm Đức Hoàng</p>
+                <div class="mt-1 h-1.5 w-full rounded-full bg-slate-100"><div class="h-full rounded-full bg-emerald-600" style="width:66%"></div></div>
+              </div>
+              <span class="text-[13px] font-semibold text-slate-900">274</span>
+            </div>
+            <div class="flex items-center gap-3">
+              <span class="w-4 text-center text-[13px] font-semibold text-slate-300">5</span>
+              <span class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-600 text-[11px] font-semibold text-white">VT</span>
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-[13px] font-medium text-slate-800">Võ Thanh Tùng</p>
+                <div class="mt-1 h-1.5 w-full rounded-full bg-slate-100"><div class="h-full rounded-full bg-amber-600" style="width:53%"></div></div>
+              </div>
+              <span class="text-[13px] font-semibold text-slate-900">219</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ========== NEW: SUBSCRIPTION PLANS TABLE (from plan) ========== -->
+      <div class="rounded-xl border border-slate-200 bg-white p-5 animate-fade-up" style="animation-delay:800ms">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h3 class="text-[14px] font-semibold text-slate-900">Gói Subscription</h3>
+            <p class="text-[13px] text-slate-500">Quản lý plans & features — Feature Flag System</p>
+          </div>
+          <button class="inline-flex items-center gap-1.5 rounded-lg bg-slate-900 px-3.5 py-2 text-[13px] font-medium text-white transition hover:bg-slate-700">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg> Thêm gói mới
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-[13px]">
+            <thead>
+              <tr class="border-b border-slate-100 text-left text-[12px] font-semibold text-slate-500 uppercase tracking-wider">
+                <th class="pb-3 pt-2 pr-4">Gói</th>
+                <th class="pb-3 pt-2 pr-4">Giá</th>
+                <th class="pb-3 pt-2 pr-4">Subscribers</th>
+                <th class="pb-3 pt-2 pr-4">Features</th>
+                <th class="pb-3 pt-2 pr-4">Limits</th>
+                <th class="pb-3 pt-2">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+              <tr class="hover:bg-slate-50 transition">
+                <td class="py-3 pr-4">
+                  <div class="flex items-center gap-2">
+                    <span class="h-3 w-3 rounded-full bg-[#94a3b8]"></span>
+                    <span class="font-medium text-slate-900">Free</span>
+                  </div>
+                </td>
+                <td class="py-3 pr-4 text-slate-600">0 ₫</td>
+                <td class="py-3 pr-4 text-slate-600">1,842</td>
+                <td class="py-3 pr-4">
+                  <div class="flex flex-wrap gap-1">
+                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">export</span>
+                  </div>
+                </td>
+                <td class="py-3 pr-4 text-slate-500 text-[12px]">3 projects · 25 diagrams · 10 AI/mo</td>
+                <td class="py-3"><span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Active</span></td>
+              </tr>
+              <tr class="hover:bg-slate-50 transition">
+                <td class="py-3 pr-4">
+                  <div class="flex items-center gap-2">
+                    <span class="h-3 w-3 rounded-full bg-[#6366f1]"></span>
+                    <span class="font-medium text-slate-900">Pro</span>
+                    <span class="rounded-full bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700">POPULAR</span>
+                  </div>
+                </td>
+                <td class="py-3 pr-4 text-slate-600">290,000 ₫/tháng</td>
+                <td class="py-3 pr-4 text-slate-600">746</td>
+                <td class="py-3 pr-4">
+                  <div class="flex flex-wrap gap-1">
+                    <span class="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-700">unlimited_uml</span>
+                    <span class="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-700">ai_assistant</span>
+                    <span class="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-700">export</span>
+                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">+3</span>
+                  </div>
+                </td>
+                <td class="py-3 pr-4 text-slate-500 text-[12px]">30 projects · ∞ diagrams · 1K AI/mo</td>
+                <td class="py-3"><span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Active</span></td>
+              </tr>
+              <tr class="hover:bg-slate-50 transition">
+                <td class="py-3 pr-4">
+                  <div class="flex items-center gap-2">
+                    <span class="h-3 w-3 rounded-full bg-[#0ea5e9]"></span>
+                    <span class="font-medium text-slate-900">Business</span>
+                  </div>
+                </td>
+                <td class="py-3 pr-4 text-slate-600">890,000 ₫/tháng</td>
+                <td class="py-3 pr-4 text-slate-600">213</td>
+                <td class="py-3 pr-4">
+                  <div class="flex flex-wrap gap-1">
+                    <span class="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] text-sky-700">all_features</span>
+                  </div>
+                </td>
+                <td class="py-3 pr-4 text-slate-500 text-[12px]">∞ projects · ∞ diagrams · 10K AI/mo</td>
+                <td class="py-3"><span class="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Active</span></td>
+              </tr>
+              <tr class="hover:bg-slate-50 transition">
+                <td class="py-3 pr-4">
+                  <div class="flex items-center gap-2">
+                    <span class="h-3 w-3 rounded-full bg-[#0f172a]"></span>
+                    <span class="font-medium text-slate-900">Enterprise</span>
+                  </div>
+                </td>
+                <td class="py-3 pr-4 text-slate-600">Liên hệ</td>
+                <td class="py-3 pr-4 text-slate-600">18</td>
+                <td class="py-3 pr-4">
+                  <div class="flex flex-wrap gap-1">
+                    <span class="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-white">all_features</span>
+                    <span class="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-white">sso</span>
+                    <span class="rounded-full bg-slate-800 px-2 py-0.5 text-[11px] text-white">priority_support</span>
+                  </div>
+                </td>
+                <td class="py-3 pr-4 text-slate-500 text-[12px]">∞ everything</td>
+                <td class="py-3"><span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">Draft</span></td>
+              </tr>
+            </tbodyilon-3>
+          </table>
+        </div>
+      </div>
+
+      <!-- ========== NEW: ANOMALY DETECTION PANEL (from plan) ========== -->
+      <div class="rounded-xl border border-rose-200 bg-rose-50 p-5 animate-fade-up" style="animation-delay:850ms">
+        <div class="flex items-center gap-3 mb-4">
+          <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-100 text-rose-600">
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 2.188 3.374h13.625c1.972 0 3.054-1.874 2.188-3.374l-6.813-11.5a2.25 2.25 0 00-3.876 0l-6.813 11.5z"/></svg>
+          </span>
+          <div>
+            <h3 class="text-[14px] font-semibold text-rose-900">Anomaly Detection</h3>
+            <p class="text-[13px] text-rose-700">Phát hiện bất thường tự động — kiểm tra mỗi phút</p>
+          </div>
+        </div>
+        <div class="grid gap-3 sm:grid-cols-3">
+          <div class="rounded-lg bg-white border border-rose-100 p-3">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span>
+              <span class="text-[12px] font-medium text-rose-700">Cost Spike</span>
+            </div>
+            <p class="text-[13px] text-slate-600">Chi phí AI vượt <span class="font-semibold text-rose-700">200% baseline</span></p>
+            <p class="text-[11px] text-slate-400 mt-1">Trigger: 2 phút trước · Severity: CRITICAL</p>
+          </div>
+          <div class="rounded-lg bg-white border border-amber-100 p-3">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="h-2 w-2 rounded-full bg-amber-500"></span>
+              <span class="text-[12px] font-medium text-amber-700">High Error Rate</span>
+            </div>
+            <p class="text-[13px] text-slate-600">Syntax error rate <span class="font-semibold text-amber-700">> 15%</span> trong giờ qua</p>
+            <p class="text-[11px] text-slate-400 mt-1">Trigger: 15 phút trước · Severity: WARNING</p>
+          </div>
+          <div class="rounded-lg bg-white border border-slate-200 p-3">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+              <span class="text-[12px] font-medium text-emerald-700">AI Engine Health</span>
+            </div>
+            <p class="text-[13px] text-slate-600">Tất cả providers hoạt động bình thường</p>
+            <p class="text-[11px] text-slate-400 mt-1">Last check: 30s trước · Uptime: 99.9%</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="text-center text-[12px] text-slate-400 pt-4 pb-2">
+        DiaUML Studio Admin Console · v2.0 · SSE Connected · Real-time Analytics
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+// Notification dropdown toggle
+function toggleNotifications() {
+  const dd = document.getElementById('notif-dropdown');
+  dd.classList.toggle('hidden');
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+  const bell = document.querySelector('button[onclick="toggleNotifications()"]');
+  const dd = document.getElementById('notif-dropdown');
+  if (!bell.contains(e.target) && !dd.contains(e.target)) {
+    dd.classList.add('hidden');
+  }
+});
+
+// Tab switching (placeholder)
+function switchTab(tab) {
+  // In real app, this would switch the main content
+  document.querySelectorAll('nav button').forEach(b => {
+    b.classList.remove('bg-slate-900', 'text-white');
+    b.classList.add('text-slate-600', 'hover:bg-slate-100', 'hover:text-slate-900');
+  });
+  const activeBtn = document.getElementById('nav-' + tab);
+  if (activeBtn) {
+    activeBtn.classList.remove('text-slate-600', 'hover:bg-slate-100', 'hover:text-slate-900');
+    activeBtn.classList.add('bg-slate-900', 'text-white');
+  }
+}
+
+// Chart.js configurations
+Chart.defaults.font.family = "'Inter', sans-serif";
+Chart.defaults.font.size = 11;
+
+// Plan Usage Bar Chart
+new Chart(document.getElementById('planUsageChart'), {
+  type: 'bar',
+  data: {
+    labels: ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'],
+    datasets: [
+      { label: 'Free', data: [820,910,880,1050,990,1200,1150,1380,1300,1520,1650,1810], backgroundColor: '#94a3b8', borderRadius: 4 },
+      { label: 'Pro', data: [340,390,420,470,510,560,600,650,690,740,790,850], backgroundColor: '#6366f1', borderRadius: 4 },
+      { label: 'Business', data: [180,200,230,260,290,310,340,370,400,430,460,490], backgroundColor: '#0ea5e9', borderRadius: 4 },
+      { label: 'Enterprise', data: [45,52,58,65,72,80,86,94,102,110,118,126], backgroundColor: '#0f172a', borderRadius: 4 }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, grid: { color: '#f1f5f9' }, ticks: { font: { size: 10 } } } }
+  }
+});
+
+// UML Distribution Donut
+new Chart(document.getElementById('umlDonut'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Class','Use Case','Sequence','Activity','ERD','Khác'],
+    datasets: [{ data: [28,22,18,14,10,8], backgroundColor: ['#6366f1','#0ea5e9','#8b5cf6','#f59e0b','#10b981','#94a3b8'], borderWidth: 0, hoverOffset: 4 }]
+  },
+  options: { responsive: true, maintainAspectRatio: false, cutout: '65%', plugins: { legend: { display: false } } }
+});
+
+// AI Usage Chart (Line)
+new Chart(document.getElementById('aiUsageChart'), {
+  type: 'line',
+  data: {
+    labels: ['00:00','04:00','08:00','12:00','16:00','20:00','23:59'],
+    datasets: [
+      { label: 'Ollama', data: [120,80,350,420,380,290,150], borderColor: '#6366f1', backgroundColor: 'rgba(99,102,241,0.1)', fill: true, tension: 0.4, pointRadius: 3 },
+      { label: 'Groq', data: [80,60,280,350,320,250,120], borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.1)', fill: true, tension: 0.4, pointRadius: 3 },
+      { label: 'OpenAI', data: [40,30,150,200,180,140,70], borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.1)', fill: true, tension: 0.4, pointRadius: 3 }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { x: { grid: { display: false } }, y: { grid: { color: '#f1f5f9' } } }
+  }
+});
+
+// AI Cost Chart (Area)
+new Chart(document.getElementById('aiCostChart'), {
+  type: 'line',
+  data: {
+    labels: ['T1','T2','T3','T4','T5','T6','T7','T8','T9','T10','T11','T12'],
+    datasets: [
+      { label: 'Groq', data: [12,15,18,22,25,28,32,35,38,42,48,55], borderColor: '#10b981', backgroundColor: 'rgba(16,185,129,0.15)', fill: true, tension: 0.4, pointRadius: 2 },
+      { label: 'OpenAI', data: [8,10,12,14,16,18,20,22,24,26,28,30], borderColor: '#0ea5e9', backgroundColor: 'rgba(14,165,233,0.15)', fill: true, tension: 0.4, pointRadius: 2 }
+    ]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: { x: { grid: { display: false } }, y: { grid: { color: '#f1f5f9' }, ticks: { callback: v => '$' + v } } }
+  }
+});
+</script>
+
+</body>
+</html>

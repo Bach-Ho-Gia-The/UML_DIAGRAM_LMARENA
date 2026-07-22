@@ -1,14 +1,16 @@
 package su26.uml.be.service;
 
 import org.junit.jupiter.api.Test;
-import su26.uml.be.dto.subscription.PlanSnapshot;
-import su26.uml.be.dto.subscription.QuotaSnapshot;
-import su26.uml.be.dto.subscription.SubscriptionSnapshot;
-import su26.uml.be.dto.subscription.UpgradeQuoteResponse;
-import su26.uml.be.exception.AppException;
-import su26.uml.be.exception.ErrorCode;
+import su26.uml.be.features.subscription.dto.PlanSnapshot;
+import su26.uml.be.features.subscription.dto.QuotaSnapshot;
+import su26.uml.be.features.subscription.dto.SubscriptionSnapshot;
+import su26.uml.be.features.subscription.dto.UpgradeQuoteResponse;
+import su26.uml.be.features.subscription.service.UpgradeCalculator;
+import su26.uml.be.common.exception.AppException;
+import su26.uml.be.common.exception.ErrorCode;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.UUID;
 
@@ -23,7 +25,9 @@ class UpgradeCalculatorTest {
     private SubscriptionSnapshot sub(Integer tier, long price, int nominal, LocalDateTime start, LocalDateTime end) {
         return SubscriptionSnapshot.builder()
                 .tierOrder(tier).price(BigDecimal.valueOf(price)).currency("VND")
-                .nominalAiLimit(nominal).periodStart(start).periodEnd(end).build();
+                .nominalAiLimit(nominal).periodStart(start).periodEnd(end)
+                .billingTotalDays((int) Duration.between(start, end).toDays())
+                .build();
     }
 
     private PlanSnapshot plan(Integer tier, long price, int nominal) {

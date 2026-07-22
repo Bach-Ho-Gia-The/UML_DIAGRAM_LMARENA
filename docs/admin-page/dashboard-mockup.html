@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dashboard Mockup — 2-Zone Layout</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #f1f5f9; padding: 24px; color: #0f172a; }
+  .container { max-width: 1400px; margin: 0 auto; }
+
+  /* ===== 2-ZONE GRID ===== */
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.8fr;
+    gap: 24px;
+    align-items: start;
+  }
+
+  /* --- ZONE A (left) --- */
+  .zone-a { display: flex; flex-direction: column; gap: 20px; }
+
+  /* --- ZONE B (right) --- */
+  .zone-b { display: flex; flex-direction: column; gap: 20px; }
+  .zone-b-grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  /* Cards */
+  .card {
+    background: #fff;
+    border-radius: 14px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0,0,0,.04);
+    overflow: hidden;
+  }
+  .card-header {
+    display: flex; align-items: center; gap: 8px;
+    padding: 16px 20px 0 20px;
+    font-size: 13px; font-weight: 600;
+    letter-spacing: 0.01em;
+  }
+  .card-body { padding: 16px 20px 20px; }
+
+  /* Zone tints */
+  .tint-saas   { background: linear-gradient(135deg, #fffbeb 0%, #ffffff 40%); border-color: #fde68a; }
+  .tint-ai     { background: linear-gradient(135deg, #f5f3ff 0%, #ffffff 40%); border-color: #ddd6fe; }
+  .tint-sub    { background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 40%); border-color: #a7f3d0; }
+  .tint-system { background: linear-gradient(135deg, #f8fafc 0%, #ffffff 40%); border-color: #e2e8f0; }
+
+  .badge-tint-saas   { background: #fef3c7; color: #92400e; }
+  .badge-tint-ai     { background: #ede9fe; color: #5b21b6; }
+  .badge-tint-sub    { background: #d1fae5; color: #065f46; }
+  .badge-tint-system { background: #f1f5f9; color: #334155; }
+
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10.5px; font-weight: 600; padding: 2px 8px;
+    border-radius: 20px; text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  /* Stat cards mini */
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .stat-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 14px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 2px rgba(0,0,0,.03);
+  }
+  .stat-card .icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  .stat-card .value { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; margin-top: 8px; }
+  .stat-card .label { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .stat-card .delta { font-size: 11px; font-weight: 600; margin-top: 4px; }
+
+  .stat-card .trend-up   { color: #059669; }
+  .stat-card .trend-down { color: #e11d48; }
+
+  /* Metric row */
+  .metric-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .metric-row:last-child { border-bottom: none; }
+  .metric-row .m-label { font-size: 12.5px; color: #475569; }
+  .metric-row .m-value { font-size: 14px; font-weight: 700; }
+
+  /* Chart placeholder */
+  .chart-placeholder {
+    height: 100px;
+    background: linear-gradient(90deg, #e2e8f0 0%, #f1f5f9 50%, #e2e8f0 100%);
+    border-radius: 8px;
+    margin-top: 12px;
+    display: flex; align-items: flex-end; padding: 8px;
+  }
+  .chart-bars {
+    display: flex; align-items: flex-end; gap: 3px; width: 100%; height: 80px;
+  }
+  .chart-bars .bar {
+    flex: 1; border-radius: 3px 3px 0 0;
+    background: #6366f1;
+    min-height: 8px;
+    opacity: 0.6;
+    transition: opacity .2s;
+  }
+  .chart-bars .bar:hover { opacity: 1; }
+
+  /* Table mini */
+  .mini-table { font-size: 12.5px; width: 100%; border-collapse: collapse; }
+  .mini-table td { padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
+  .mini-table tr:last-child td { border-bottom: none; }
+  .mini-table .rank { width: 20px; color: #94a3b8; font-weight: 600; text-align: center; }
+
+  .avatar { width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #fff; }
+  .avatar-sm { display: inline-block; width: 20px; height: 20px; border-radius: 4px; text-align: center; line-height: 20px; font-size: 9px; font-weight: 700; color: #fff; }
+
+  .text-muted { color: #94a3b8; font-size: 11px; }
+  .text-right { text-align: right; }
+  .mt-2 { margin-top: 8px; }
+  .mt-3 { margin-top: 12px; }
+  .flex { display: flex; }
+  .items-center { align-items: center; }
+  .gap-2 { gap: 8px; }
+  .gap-3 { gap: 12px; }
+  .justify-between { justify-content: space-between; }
+  .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .w-full { width: 100%; }
+  .min-w-0 { min-width: 0; }
+  .shrink-0 { flex-shrink: 0; }
+
+  /* Range filter inline */
+  .range-group { display: flex; gap: 4px; }
+  .range-btn {
+    font-size: 12px; font-weight: 500; padding: 4px 12px;
+    border-radius: 6px; border: 1px solid transparent;
+    background: transparent; color: #64748b; cursor: pointer;
+    transition: all .15s;
+  }
+  .range-btn.active { background: #0f172a; color: #fff; }
+
+  /* Divider */
+  .section-divider { height: 1px; background: #e2e8f0; margin: 4px 0 12px; }
+
+  /* Title large */
+  .title-lg { font-size: 20px; font-weight: 700; letter-spacing: -0.02em; }
+  .text-sm { font-size: 13px; color: #64748b; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="dashboard-grid">
+
+    <!-- ============================== -->
+    <!-- ZONE A — TƯƠNG TÁC NGƯỜI DÙNG  -->
+    <!-- ============================== -->
+    <div class="zone-a">
+
+      <!-- Welcome -->
+      <div class="card" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); color: #fff; border-color: #334155;">
+        <div class="card-body">
+          <div class="badge" style="background: rgba(255,255,255,.1); color: #e2e8f0; margin-bottom: 10px;">
+            ⚡ Hệ thống UML · AI Agent
+          </div>
+          <div class="title-lg" style="color: #fff;">Xin chào, Admin 👋</div>
+          <div style="font-size: 13px; color: #94a3b8; margin-top: 6px;">
+            Có <strong style="color: #fff;">12.4K dự án</strong> đang vận hành
+            và <strong style="color: #818cf8;">8.2K người dùng</strong> trên hệ thống.
+          </div>
+        </div>
+      </div>
+
+      <!-- Range filter (inline compact) -->
+      <div class="card">
+        <div class="card-body" style="padding: 10px 16px;">
+          <div class="flex items-center justify-between">
+            <div class="range-group">
+              <button class="range-btn">24h</button>
+              <button class="range-btn">7 ngày</button>
+              <button class="range-btn active">30 ngày</button>
+              <button class="range-btn">Tuỳ chỉnh</button>
+            </div>
+            <span class="text-muted">📅 30 ngày qua</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4 Stat cards (2×2) -->
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="icon" style="background:#eef2ff;color:#6366f1;">👥</div>
+          <div class="value">8,240</div>
+          <div class="label">Tổng người dùng</div>
+          <div class="delta trend-up">▲ +12.4%</div>
+        </div>
+        <div class="stat-card">
+          <div class="icon" style="background:#ecfeff;color:#0ea5e9;">📁</div>
+          <div class="value">12,481</div>
+          <div class="label">Dự án toàn hệ thống</div>
+          <div class="delta trend-up">▲ +8.2%</div>
+        </div>
+        <div class="stat-card">
+          <div class="icon" style="background:#f5f3ff;color:#8b5cf6;">🔷</div>
+          <div class="value">45,291</div>
+          <div class="label">Sơ đồ UML đã tạo</div>
+          <div class="delta trend-up">▲ +15.7%</div>
+        </div>
+        <div class="stat-card">
+          <div class="icon" style="background:#fff1f2;color:#f43f5e;">⚡</div>
+          <div class="value">342 ms</div>
+          <div class="label">Độ trễ AI trung bình</div>
+          <div class="delta trend-down">▼ -5.3%</div>
+        </div>
+      </div>
+
+      <!-- User metrics compact -->
+      <div class="card tint-system">
+        <div class="card-header">
+          <span class="badge badge-tint-system">📊 SỨC KHOẺ HỆ THỐNG</span>
+        </div>
+        <div class="card-body" style="padding-top: 12px;">
+          <div class="metric-row">
+            <span class="m-label">DAU (24h)</span>
+            <span class="m-value" style="color:#0ea5e9;">1,842</span>
+          </div>
+          <div class="metric-row">
+            <span class="m-label">MAU (30d)</span>
+            <span class="m-value" style="color:#8b5cf6;">6,391</span>
+          </div>
+          <div class="metric-row">
+            <span class="m-label">DAU/MAU</span>
+            <span class="m-value" style="color:#10b981;">28.8%</span>
+          </div>
+          <div class="metric-row">
+            <span class="m-label">Tổng người dùng</span>
+            <span class="m-value" style="color:#6366f1;">8,240</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /zone-a -->
+
+    <!-- ============================== -->
+    <!-- ZONE B — SAAS + AI + SUB       -->
+    <!-- ============================== -->
+    <div class="zone-b">
+
+      <!-- Row 1: SaaS Financial + AI Operations (side by side) -->
+      <div class="zone-b-grid-2">
+
+        <!-- Block B1: SaaS Financial -->
+        <div class="card tint-saas">
+          <div class="card-header">
+            <span class="badge badge-tint-saas">💰 TÀI CHÍNH SAAS</span>
+          </div>
+          <div class="card-body" style="padding-top: 12px;">
+            <div class="metric-row">
+              <span class="m-label">MRR</span>
+              <span class="m-value" style="color:#d97706;">254.000.000 ₫</span>
+            </div>
+            <div class="metric-row">
+              <span class="m-label">ARPU</span>
+              <span class="m-value" style="color:#06b6d4;">39.800 ₫</span>
+            </div>
+            <div class="metric-row">
+              <span class="m-label">Churn rate</span>
+              <span class="m-value" style="color:#e11d48;">4.2%</span>
+            </div>
+            <div class="metric-row">
+              <span class="m-label">Margin</span>
+              <span class="m-value" style="color:#10b981;">72%</span>
+            </div>
+
+            <!-- Mini revenue sparkline -->
+            <div class="mt-2">
+              <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Xu hướng MRR 30 ngày</div>
+              <div class="chart-placeholder" style="height:56px;padding:4px;">
+                <div class="chart-bars" style="height:44px;">
+                  <div class="bar" style="height:30%;"></div>
+                  <div class="bar" style="height:45%;"></div>
+                  <div class="bar" style="height:25%;"></div>
+                  <div class="bar" style="height:55%;"></div>
+                  <div class="bar" style="height:40%;"></div>
+                  <div class="bar" style="height:60%;"></div>
+                  <div class="bar" style="height:35%;"></div>
+                  <div class="bar" style="height:50%;"></div>
+                  <div class="bar" style="height:70%;"></div>
+                  <div class="bar" style="height:45%;"></div>
+                  <div class="bar" style="height:55%;"></div>
+                  <div class="bar" style="height:80%;"></div>
+                  <div class="bar" style="height:65%;"></div>
+                  <div class="bar" style="height:90%;background:#f59e0b;"></div>
+                  <div class="bar" style="height:75%;"></div>
+                  <div class="bar" style="height:85%;background:#f59e0b;"></div>
+                  <div class="bar" style="height:50%;"></div>
+                  <div class="bar" style="height:70%;"></div>
+                  <div class="bar" style="height:95%;background:#f59e0b;"></div>
+                  <div class="bar" style="height:60%;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Block B2: AI Operations -->
+        <div class="card tint-ai">
+          <div class="card-header">
+            <span class="badge badge-tint-ai">🤖 VẬN HÀNH AI</span>
+          </div>
+          <div class="card-body" style="padding-top: 12px;">
+            <div class="metric-row">
+              <span class="m-label">Yêu cầu AI (24h)</span>
+              <span class="m-value" style="color:#6366f1;">12,847</span>
+            </div>
+            <div class="metric-row">
+              <span class="m-label">Chi phí AI (tháng)</span>
+              <span class="m-value" style="color:#e11d48;">4.200.000 ₫</span>
+            </div>
+            <div class="metric-row">
+              <span class="m-label">Độ trễ TB</span>
+              <span class="m-value" style="color:#0ea5e9;">342 ms</span>
+            </div>
+            <div class="metric-row">
+              <span class="m-label">Tỷ lệ lỗi</span>
+              <span class="m-value" style="color:#f59e0b;">1.8%</span>
+            </div>
+
+            <!-- Provider breakdown mini -->
+            <div class="mt-2">
+              <div style="font-size:11px;color:#94a3b8;margin-bottom:4px;">Phân bố provider</div>
+              <div style="display:flex;gap:6px;">
+                <span class="avatar-sm" style="background:#6366f1;">G</span>
+                <span class="avatar-sm" style="background:#0ea5e9;">O</span>
+                <span class="avatar-sm" style="background:#10b981;">A</span>
+                <span class="avatar-sm" style="background:#f59e0b;">D</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 2: Revenue chart (full width) -->
+      <div class="card">
+        <div class="card-header">
+          <span class="badge badge-tint-saas">📈 DOANH THU</span>
+          <span class="text-muted" style="font-weight:400;margin-left:auto;">MRR theo ngày · 30 ngày</span>
+        </div>
+        <div class="card-body">
+          <div class="chart-placeholder" style="height:140px;">
+            <div class="chart-bars" style="height:120px;">
+              <div class="bar" style="height:20%;"></div>
+              <div class="bar" style="height:35%;"></div>
+              <div class="bar" style="height:15%;"></div>
+              <div class="bar" style="height:45%;"></div>
+              <div class="bar" style="height:30%;"></div>
+              <div class="bar" style="height:50%;"></div>
+              <div class="bar" style="height:25%;"></div>
+              <div class="bar" style="height:40%;"></div>
+              <div class="bar" style="height:60%;"></div>
+              <div class="bar" style="height:35%;"></div>
+              <div class="bar" style="height:45%;"></div>
+              <div class="bar" style="height:70%;"></div>
+              <div class="bar" style="height:55%;"></div>
+              <div class="bar" style="height:80%;"></div>
+              <div class="bar" style="height:65%;"></div>
+              <div class="bar" style="height:75%;"></div>
+              <div class="bar" style="height:40%;"></div>
+              <div class="bar" style="height:60%;"></div>
+              <div class="bar" style="height:85%;"></div>
+              <div class="bar" style="height:50%;"></div>
+              <div class="bar" style="height:30%;"></div>
+              <div class="bar" style="height:55%;"></div>
+              <div class="bar" style="height:70%;"></div>
+              <div class="bar" style="height:45%;"></div>
+              <div class="bar" style="height:65%;"></div>
+              <div class="bar" style="height:90%;"></div>
+              <div class="bar" style="height:75%;"></div>
+              <div class="bar" style="height:60%;"></div>
+              <div class="bar" style="height:85%;"></div>
+              <div class="bar" style="height:100%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 3: Subscriptions + Top tables (side by side) -->
+      <div class="zone-b-grid-2">
+
+        <!-- Block B3: Subscription Business -->
+        <div class="card tint-sub">
+          <div class="card-header">
+            <span class="badge badge-tint-sub">💳 KINH DOANH SUBSCRIPTION</span>
+          </div>
+          <div class="card-body" style="padding-top: 12px;">
+            <div class="metric-row">
+              <span class="m-label">Gói Basic</span>
+              <span class="m-value">3,842</span>
+            </div>
+            <div class="metric-row">
+              <span class="m-label">Gói Pro</span>
+              <span class="m-value">1,256</span>
+            </div>
+            <div class="metric-row">
+              <span class="m-label">Gói Enterprise</span>
+              <span class="m-value">128</span>
+            </div>
+            <div class="metric-row">
+              <span class="m-label">Tỷ lệ chuyển đổi</span>
+              <span class="m-value" style="color:#10b981;">38.2%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Block B4: System Health -->
+        <div class="card tint-system">
+          <div class="card-header">
+            <span class="badge badge-tint-system">⚙️ HỆ THỐNG</span>
+          </div>
+          <div class="card-body" style="padding-top: 12px;">
+            <div class="metric-row">
+              <span class="m-label">Uptime (30d)</span>
+              <span class="m-value" style="color:#10b981;">99.97%</span>
+            </div>
+            <div class="metric-row">
+              <span class="m-label">API latency P95</span>
+              <span class="m-value" style="color:#0ea5e9;">186 ms</span>
+            </div>
+            <div class="metric-row">
+              <span class="m-label">Lỗi API (24h)</span>
+              <span class="m-value" style="color:#f59e0b;">23</span>
+            </div>
+            <div class="metric-row">
+              <span class="m-label">Redis hit rate</span>
+              <span class="m-value" style="color:#6366f1;">94.5%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Row 4: Top users + Top projects (side by side) -->
+      <div class="zone-b-grid-2">
+        <!-- Top AI users -->
+        <div class="card">
+          <div class="card-header">
+            ⚡ Top người dùng AI
+            <span class="text-muted" style="font-weight:400;">· theo lượt truy vấn</span>
+          </div>
+          <div class="card-body" style="padding-top: 8px;">
+            <table class="mini-table">
+              <tr><td class="rank">1</td><td><span class="avatar" style="background:#6366f1;">NT</span></td><td class="min-w-0 w-full"><div class="truncate">Nguyễn Văn A</div><div class="text-muted">a@example.com</div></td><td class="text-right"><strong>12,847</strong><br><span class="text-muted">lượt AI</span></td></tr>
+              <tr><td class="rank">2</td><td><span class="avatar" style="background:#0ea5e9;">TL</span></td><td class="min-w-0 w-full"><div class="truncate">Trần Thị B</div><div class="text-muted">b@example.com</div></td><td class="text-right"><strong>9,421</strong><br><span class="text-muted">lượt AI</span></td></tr>
+              <tr><td class="rank">3</td><td><span class="avatar" style="background:#8b5cf6;">LC</span></td><td class="min-w-0 w-full"><div class="truncate">Lê Văn C</div><div class="text-muted">c@example.com</div></td><td class="text-right"><strong>6,782</strong><br><span class="text-muted">lượt AI</span></td></tr>
+            </table>
+          </div>
+        </div>
+
+        <!-- Top projects -->
+        <div class="card">
+          <div class="card-header">
+            📁 Top dự án
+            <span class="text-muted" style="font-weight:400;">· theo số sơ đồ</span>
+          </div>
+          <div class="card-body" style="padding-top: 8px;">
+            <table class="mini-table">
+              <tr><td class="rank">1</td><td><span class="avatar" style="background:#f59e0b;">CB</span></td><td class="min-w-0 w-full"><div class="truncate">Core Banking System</div><div class="text-muted">admin@bank.vn</div></td><td class="text-right"><strong>342</strong><br><span class="text-muted">sơ đồ</span></td></tr>
+              <tr><td class="rank">2</td><td><span class="avatar" style="background:#10b981;">EC</span></td><td class="min-w-0 w-full"><div class="truncate">E-Commerce Platform</div><div class="text-muted">cto@shop.vn</div></td><td class="text-right"><strong>218</strong><br><span class="text-muted">sơ đồ</span></td></tr>
+              <tr><td class="rank">3</td><td><span class="avatar" style="background:#e11d48;">HR</span></td><td class="min-w-0 w-full"><div class="truncate">HR Management</div><div class="text-muted">hr@company.vn</div></td><td class="text-right"><strong>156</strong><br><span class="text-muted">sơ đồ</span></td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /zone-b -->
+
+  </div><!-- /dashboard-grid -->
+</div>
+</body>
+</html>
