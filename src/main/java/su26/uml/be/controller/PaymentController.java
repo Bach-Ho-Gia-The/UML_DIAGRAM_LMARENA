@@ -16,7 +16,6 @@ import su26.uml.be.exception.ErrorCode;
 import su26.uml.be.repository.UserRepository;
 import su26.uml.be.service.PaymentService;
 import su26.uml.be.service.UpgradePaymentService;
-import org.springframework.beans.factory.annotation.Value;
 import vn.payos.PayOS;
 import vn.payos.model.webhooks.WebhookData;
 
@@ -31,10 +30,6 @@ public class PaymentController {
     private final PayOS payOS;
     private final UserRepository userRepository;
 
-    /** Chặng 2 cutover: ON → tự phân loại mua mới/nâng cấp (UpgradePaymentService); OFF → flow cũ. */
-    @Value("${feature.entitlement-v2-enabled:false}")
-    private boolean entitlementV2Enabled;
-
     @PostMapping("/create")
     public ResponseEntity<ApiResponse<PaymentResponse>> createPaymentLink(
             @AuthenticationPrincipal UserDetails userDetails,
@@ -44,9 +39,7 @@ public class PaymentController {
         }
         User user = userRepository.findByEmail(userDetails.getUsername())
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-        PaymentResponse response = entitlementV2Enabled
-                ? upgradePaymentService.createIntentPayment(user, request.getPlanId(), request.getReturnUrl(), request.getCancelUrl())
-                : paymentService.createPaymentLink(user, request.getPlanId(), request.getReturnUrl(), request.getCancelUrl());
+        PaymentResponse response = upgradePaymentService.createIntentPayment(user, request.getPlanId(), request.getReturnUrl(), request.getCancelUrl());
         return ResponseEntity.ok(ApiResponse.success("Tạo link thanh toán thành công", response));
     }
 
@@ -60,7 +53,6 @@ public class PaymentController {
     @PostMapping("/webhook")
     public ResponseEntity<String> handleWebhook(@RequestBody Object webhookBody) {
         try {
-            // Verify checksum signature using PayOS SDK v2
             WebhookData webhookData = payOS.webhooks().verify(webhookBody);
             paymentService.processWebhook(webhookData);
             return ResponseEntity.ok("success");

@@ -180,7 +180,6 @@ public enum ErrorCode {
     DIAGRAM_VERSION_SHEET_MISMATCH(2226, "Phiên bản không thuộc trang biểu đồ này", HttpStatus.BAD_REQUEST),
 
     // SUBSCRIPTION / UPGRADE (Phase 1 — Chặng 1C/2)
-    FEATURE_DISABLED(2140, "Tính năng chưa được bật", HttpStatus.NOT_FOUND),
     UPGRADE_REQUIRES_ACTIVE_SUBSCRIPTION(2141, "Bạn chưa có gói trả phí đang hiệu lực để nâng cấp", HttpStatus.BAD_REQUEST),
     UPGRADE_TARGET_NOT_HIGHER_TIER(2142, "Chỉ có thể nâng lên gói bậc cao hơn", HttpStatus.BAD_REQUEST),
     PLAN_TIER_NOT_CONFIGURED(2143, "Gói chưa được cấu hình bậc (tierOrder)", HttpStatus.BAD_REQUEST),

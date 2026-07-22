@@ -8,7 +8,7 @@ spring:
     name: ${APP_NAME}
 
   config:
-    import: optional:file:BE/.env[.properties]
+    import: optional:file:.env[.properties]
 
   datasource:
 #    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}?sslmode=require&prepareThreshold=0
@@ -144,23 +144,6 @@ payos:
   client-id: ${PAYOS_CLIENT_ID:YOUR_CLIENT_ID}
   api-key: ${PAYOS_API_KEY:YOUR_API_KEY}
   checksum-key: ${PAYOS_CHECKSUM_KEY:YOUR_CHECKSUM_KEY}
-
-# ─── Subscription Phase 1 (IMPLEMENTATION_PLAN §2) ───
-# Feature flags: mặc định OFF → code mới không đổi hành vi baseline. Bật canary từng cái.
-feature:
-  quote-v2-enabled: ${FEATURE_QUOTE_V2:false}          # Chặng 1C — endpoint quote nâng cấp
-  entitlement-v2-enabled: ${FEATURE_ENTITLEMENT_V2:false}  # Chặng 2  — cutover subscription/entitlement
-  compliance-guard-enabled: ${FEATURE_COMPLIANCE_GUARD:false} # Chặng 4A
-  archive-enabled: ${FEATURE_ARCHIVE:false}            # Chặng 4B
-  purge-enabled: ${FEATURE_PURGE:false}                # Chặng 5 (mặc định OFF vĩnh viễn)
-
-quota:
-  # Độ dài kỳ quota (ngày) — Free reset lăn, paid trùng billing period.
-  period-days: ${QUOTA_PERIOD_DAYS:30}
-
-subscription:
-  # TTL báo giá nâng cấp (phút) — quote quá hạn phải tạo lại (Chặng 2 enforce).
-  quote-ttl-minutes: ${SUBSCRIPTION_QUOTE_TTL_MINUTES:15}
 
 management:
   endpoints:

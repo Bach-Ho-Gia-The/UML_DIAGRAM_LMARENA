@@ -13,9 +13,11 @@ import su26.uml.be.entity.FeatureCatalog;
 import su26.uml.be.entity.Role;
 import su26.uml.be.entity.Plan;
 import su26.uml.be.entity.Sheet;
+import su26.uml.be.entity.Subscription;
 import su26.uml.be.entity.User;
 import su26.uml.be.entity.WorkspaceItem;
 import su26.uml.be.enums.PlanFeatureKey;
+import su26.uml.be.enums.SubscriptionStatus;
 import su26.uml.be.enums.UserStatus;
 import su26.uml.be.mapper.WorkspaceItemMapper;
 import su26.uml.be.repository.FeatureCatalogRepository;
@@ -23,11 +25,13 @@ import su26.uml.be.repository.RoleRepository;
 import su26.uml.be.repository.PlanRepository;
 import su26.uml.be.repository.SheetRepository;
 import su26.uml.be.repository.UserRepository;
+import su26.uml.be.repository.SubscriptionRepository;
 import su26.uml.be.repository.WorkspaceItemRepository;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.jdbc.core.JdbcTemplate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -52,6 +56,7 @@ public class DataInitializer implements CommandLineRunner {
     WorkspaceItemMapper workspaceItemMapper;
     PasswordEncoder passwordEncoder;
     JdbcTemplate jdbcTemplate;
+    SubscriptionRepository subscriptionRepository;
     ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
@@ -93,6 +98,9 @@ public class DataInitializer implements CommandLineRunner {
 
         // 4d. Đánh dấu gói Free (UUID cố định) là base plan.
         backfillBasePlan();
+
+        // 4e. Tạo user test upgrade (Standard plan, 15 ngày còn lại).
+        seedUpgradeTestUser();
 
         // 5. Workspace file tree: backfill sheets.diagram_type + one root DIAGRAM item per sheet.
         backfillWorkspaceItems();
@@ -413,6 +421,47 @@ public class DataInitializer implements CommandLineRunner {
         } catch (Exception e) {
             return "activity";
         }
+    }
+
+    private void seedUpgradeTestUser() {
+        String email = "upgrader@test.com";
+        if (userRepository.existsByEmail(email)) return;
+
+        Role userRole = roleRepository.findByRoleName("USER")
+                .orElseThrow(() -> new RuntimeException("USER role not found"));
+        Plan standardPlan = planRepository.findById(
+                        UUID.fromString("33333333-3333-3333-3333-333333333333"))
+                .orElseThrow(() -> new RuntimeException("Standard plan not found"));
+
+        User user = User.builder()
+                .email(email)
+                .username("upgrader")
+                .password(passwordEncoder.encode("Upgrader123"))
+                .fullName("Upgrade Test User")
+                .status(UserStatus.ACTIVE)
+                .profileCompleted(true)
+                .role(userRole)
+                .build();
+        user = userRepository.save(user);
+
+        LocalDateTime now = LocalDateTime.now();
+        Subscription sub = Subscription.builder()
+                .user(user)
+                .plan(standardPlan)
+                .status(SubscriptionStatus.ACTIVE)
+                .startDate(now.minusDays(15))
+                .endDate(now.plusDays(15))
+                .billingPriceSnapshot(new java.math.BigDecimal("49000"))
+                .currencySnapshot("VND")
+                .billingCycleSnapshot("MONTHLY")
+                .nominalAiLimitSnapshot(600)
+                .build();
+        sub = subscriptionRepository.save(sub);
+
+        user.setCurrentSubscription(sub);
+        userRepository.save(user);
+
+        log.info("Created upgrade test user: {} / Upgrader123 (Standard plan, 15d remaining)", email);
     }
 
     private Role initRole(String roleName, String description) {

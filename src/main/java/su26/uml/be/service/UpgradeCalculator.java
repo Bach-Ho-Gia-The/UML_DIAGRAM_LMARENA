@@ -74,6 +74,8 @@ public class UpgradeCalculator {
                 .priceDifference(priceDifference)
                 .billingRemainingRatio(ratioForDisplay(billingRemaining, billingTotal))
                 .quotaRemainingRatio(ratioForDisplay(quotaRemaining, quotaTotal))
+                .billingRemainingDays((int) (billingRemaining / 86400))
+                .billingTotalDays((int) (billingTotal / 86400))
                 .amountToPay(amountToPay)
                 .oldNominalQuota(current.getNominalAiLimit())
                 .newNominalQuota(target.getNominalAiLimit())
