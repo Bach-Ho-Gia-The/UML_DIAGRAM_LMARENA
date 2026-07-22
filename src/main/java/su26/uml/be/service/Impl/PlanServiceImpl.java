@@ -91,7 +91,9 @@ public class PlanServiceImpl implements PlanService {
         }
 
         Plan saved = planRepository.save(plan);
-        return ApiResponse.success("Tạo gói thành công", buildResponse(saved, loadCatalog()));
+        renumberTierOrderByPrice();
+        return ApiResponse.success("Tạo gói thành công",
+                buildResponse(planRepository.findById(saved.getId()).orElse(saved), loadCatalog()));
     }
 
     @Override
@@ -119,7 +121,9 @@ public class PlanServiceImpl implements PlanService {
         }
 
         Plan saved = planRepository.save(plan);
-        return ApiResponse.success("Cập nhật gói thành công", buildResponse(saved, loadCatalog()));
+        renumberTierOrderByPrice();
+        return ApiResponse.success("Cập nhật gói thành công",
+                buildResponse(planRepository.findById(saved.getId()).orElse(saved), loadCatalog()));
     }
 
     @Override
@@ -137,7 +141,15 @@ public class PlanServiceImpl implements PlanService {
         }
 
         planRepository.delete(plan);
+        renumberTierOrderByPrice();
         return ApiResponse.<Void>builder().build();
+    }
+
+    @Override
+    @Transactional
+    public ApiResponse<List<PlanResponse>> reorderPlans() {
+        renumberTierOrderByPrice();
+        return getAllPlans();
     }
 
     // --- helpers ---
@@ -158,21 +170,27 @@ public class PlanServiceImpl implements PlanService {
             }
         }
 
-        // tierOrder unique
-        if (request.getTierOrder() != null) {
-            boolean tierTaken = planRepository.existsByTierOrder(request.getTierOrder())
-                    && (existing == null || !request.getTierOrder().equals(existing.getTierOrder()));
-            if (tierTaken) {
-                throw new AppException(ErrorCode.PLAN_TIER_ORDER_DUPLICATE);
-            }
+        // Giá unique (không cho 2 gói cùng giá) — nền cho auto tierOrder theo giá.
+        boolean priceTaken = existing == null
+                ? planRepository.existsByPrice(request.getPrice())
+                : planRepository.existsByPriceAndIdNot(request.getPrice(), existing.getId());
+        if (priceTaken) {
+            throw new AppException(ErrorCode.PLAN_PRICE_DUPLICATE);
         }
+        // tierOrder KHÔNG do admin nhập — BE tự tính theo giá (renumberTierOrderByPrice sau khi lưu).
+    }
 
-        // tierOrder required for paid plans
-        if (request.getPrice().compareTo(java.math.BigDecimal.ZERO) > 0
-                && request.getTierOrder() == null
-                && (existing == null || existing.getTierOrder() == null)) {
-            throw new AppException(ErrorCode.PLAN_TIER_REQUIRED);
+    /** Gán tierOrder = 0,1,2... theo giá tăng dần cho các gói ACTIVE (giá unique → không trùng). */
+    private void renumberTierOrderByPrice() {
+        List<Plan> active = planRepository.findByStatusOrderByPriceAsc(PlanStatus.ACTIVE);
+        int order = 0;
+        for (Plan p : active) {
+            if (!Integer.valueOf(order).equals(p.getTierOrder())) {
+                p.setTierOrder(order);
+            }
+            order++;
         }
+        planRepository.saveAll(active);
     }
 
     private List<FeatureCatalog> loadCatalog() {

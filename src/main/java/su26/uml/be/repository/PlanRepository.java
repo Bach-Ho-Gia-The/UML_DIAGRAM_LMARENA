@@ -16,6 +16,10 @@ public interface PlanRepository extends JpaRepository<Plan, UUID> {
 
     boolean existsByNameIgnoreCase(String name);
 
+    /** Giá gói phải unique (không cho 2 gói cùng giá) — nền cho auto tierOrder theo giá. */
+    boolean existsByPrice(java.math.BigDecimal price);
+    boolean existsByPriceAndIdNot(java.math.BigDecimal price, UUID id);
+
     /** Gói mặc định cho user chưa có subscription = gói ACTIVE giá thấp nhất. */
     Optional<Plan> findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus status);
 

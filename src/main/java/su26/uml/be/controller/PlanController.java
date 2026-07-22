@@ -75,4 +75,12 @@ public class PlanController {
     public ApiResponse<Void> deletePlan(@PathVariable UUID id) {
         return planService.deletePlan(id);
     }
+
+    @PostMapping("/admin/plans/reorder")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Reorder plans by price (admin)",
+            description = "Gán lại tierOrder = 0,1,2... theo giá tăng dần cho các gói ACTIVE.")
+    public ApiResponse<List<PlanResponse>> reorderPlans() {
+        return planService.reorderPlans();
+    }
 }

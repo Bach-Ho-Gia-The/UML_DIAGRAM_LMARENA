@@ -14,4 +14,7 @@ public interface PlanService {
     ApiResponse<PlanResponse> createPlan(PlanRequest request);
     ApiResponse<PlanResponse> updatePlan(UUID id, PlanRequest request);
     ApiResponse<Void> deletePlan(UUID id);
+
+    /** Gán lại tierOrder = 0,1,2... theo giá tăng dần cho các gói ACTIVE. */
+    ApiResponse<List<PlanResponse>> reorderPlans();
 }
