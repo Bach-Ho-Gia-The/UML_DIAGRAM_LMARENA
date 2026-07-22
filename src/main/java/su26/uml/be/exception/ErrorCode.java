@@ -193,6 +193,11 @@ public enum ErrorCode {
     PLAN_TIER_ORDER_DUPLICATE(2116, "Thứ tự bậc (tierOrder) đã tồn tại ở gói khác", HttpStatus.BAD_REQUEST),
     BASE_PLAN_ALREADY_EXISTS(2117, "Đã có gói cơ bản (base plan). Hãy bỏ đánh dấu gói cũ trước.", HttpStatus.BAD_REQUEST),
     PLAN_TIER_REQUIRED(2118, "Gói trả phí phải có thứ tự bậc (tierOrder)", HttpStatus.BAD_REQUEST),
+
+    // CANCEL SUBSCRIPTION
+    NO_ACTIVE_SUBSCRIPTION(2149, "Bạn chưa có gói trả phí đang hiệu lực để hủy", HttpStatus.BAD_REQUEST),
+    SUBSCRIPTION_ALREADY_CANCELLED(2150, "Gói đã được hủy gia hạn trước đó", HttpStatus.BAD_REQUEST),
+    SUBSCRIPTION_NOT_CANCELLED(2151, "Gói chưa ở trạng thái hủy gia hạn", HttpStatus.BAD_REQUEST),
     ;
 
     private int code;

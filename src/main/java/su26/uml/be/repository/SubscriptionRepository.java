@@ -24,6 +24,9 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
      */
     @Query("SELECT COALESCE(SUM(s.plan.price), 0) FROM Subscription s WHERE s.status = :status")
     BigDecimal sumPlanPriceByStatus(@Param("status") SubscriptionStatus status);
+
+    /** Sub còn ACTIVE nhưng đã quá endDate — cho SubscriptionExpiryJob hạ về base. */
+    List<Subscription> findByStatusAndEndDateBefore(SubscriptionStatus status, LocalDateTime now);
     long countByStatusAndEndDateBetween(SubscriptionStatus status, LocalDateTime from, LocalDateTime to);
     long countByStartDateBeforeAndStatus(LocalDateTime before, SubscriptionStatus status);
     long countByPlanAndStatus(Plan plan, SubscriptionStatus status);

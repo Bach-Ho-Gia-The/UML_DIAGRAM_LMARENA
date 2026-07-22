@@ -11,6 +11,7 @@ import su26.uml.be.dto.request.UserRegisterRequest;
 import su26.uml.be.dto.response.DeleteAccountResponse;
 import su26.uml.be.dto.response.MeResponse;
 import su26.uml.be.dto.response.UserResponse;
+import su26.uml.be.entity.Plan;
 import su26.uml.be.entity.User;
 
 import java.util.List;
@@ -30,6 +31,13 @@ public interface UserMapper {
     @Mapping(target = "currentPlanId", source = "currentSubscription.plan.id")
     // profileCompleted maps directly from the User.profileCompleted column (source of truth).
     MeResponse toMeResponse(User user);
+
+    // Gói hiệu lực → tag trên MeResponse. ignoreByDefault để KHÔNG map nhầm plan.id → MeResponse.id (user id).
+    @BeanMapping(ignoreByDefault = true)
+    @Mapping(target = "effectivePlanId", source = "id")
+    @Mapping(target = "planName", source = "name")
+    @Mapping(target = "planColor", source = "color")
+    void applyEffectivePlan(Plan plan, @MappingTarget MeResponse target);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     void updateUser(UpdateUserRequest request, @MappingTarget User user);

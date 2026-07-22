@@ -49,4 +49,13 @@ public class Subscription extends BaseEntity {
     /** Nominal AI quota của gói lúc mua (snapshot) — nền cho tính delta khi upgrade. */
     @Column(name = "nominal_ai_limit_snapshot")
     Integer nominalAiLimitSnapshot;
+
+    // ─── Cancel Subscription (graceful downgrade) ───
+    /** True = user đã hủy gia hạn; vẫn giữ Premium tới endDate, hết kỳ về base. Status GIỮ ACTIVE. */
+    @Column(name = "cancel_at_period_end", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    Boolean cancelAtPeriodEnd = false;
+
+    @Column(name = "cancelled_at")
+    LocalDateTime cancelledAt;
 }

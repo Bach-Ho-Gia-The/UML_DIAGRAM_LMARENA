@@ -253,7 +253,23 @@ public class UserServiceImpl implements UserService {
 
         MeResponse meResponse = userMapper.toMeResponse(user);
 
+        // Gói hiệu lực để FE vẽ tag (paid sub → gói đó; không có → base). currentPlanId giữ nguyên (null cho free).
+        Plan effective = resolveEffectivePlan(user.getId(), LocalDateTime.now());
+        if (effective != null) {
+            userMapper.applyEffectivePlan(effective, meResponse);
+        }
         return ApiResponse.success("Lấy thông tin người dùng hiện tại thành công", meResponse);
+    }
+
+    /** Gói hiệu lực: paid sub ACTIVE (chưa hết hạn) → gói đó; nếu không → gói base (isBasePlan), fallback giá thấp nhất. */
+    private Plan resolveEffectivePlan(UUID userId, LocalDateTime now) {
+        return subscriptionRepository
+                .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, now)
+                .map(Subscription::getPlan)
+                .orElseGet(() -> planRepository
+                        .findFirstByIsBasePlanTrueAndStatus(PlanStatus.ACTIVE)
+                        .or(() -> planRepository.findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE))
+                        .orElse(null));
     }
 
     @Override
