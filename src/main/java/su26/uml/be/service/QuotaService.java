@@ -1,6 +1,7 @@
 package su26.uml.be.service;
 
 import su26.uml.be.dto.response.QuotaResponse;
+import su26.uml.be.entity.Plan;
 
 import java.util.UUID;
 
@@ -26,8 +27,9 @@ public interface QuotaService {
     void resetOnPlanChange(UUID userId);
 
     /**
-     * Áp nâng cấp giữa kỳ: đặt limit mới = {@code newEffectiveLimit} và gắn {@code subscriptionId} mới,
-     * NHƯNG giữ nguyên {@code aiUsed} và {@code resetAt} (BR-UPGRADE-05/06 — không reset used, không kéo dài kỳ).
+     * Áp nâng cấp giữa kỳ: cập nhật ngay {@code planId} + {@code nominalAiLimit} theo {@code newPlan},
+     * đặt limit hiệu lực = {@code newEffectiveLimit}, gắn {@code subscriptionId} mới; NHƯNG giữ nguyên
+     * {@code aiUsed} và {@code resetAt} (BR-UPGRADE-05/06 — không reset used, không kéo dài kỳ).
      */
-    void applyUpgrade(UUID userId, int newEffectiveLimit, UUID subscriptionId);
+    void applyUpgrade(UUID userId, Plan newPlan, int newEffectiveLimit, UUID subscriptionId);
 }

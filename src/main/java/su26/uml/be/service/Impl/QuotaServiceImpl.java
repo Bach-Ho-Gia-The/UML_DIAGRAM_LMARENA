@@ -97,12 +97,14 @@ public class QuotaServiceImpl implements QuotaService {
 
     @Override
     @Transactional
-    public void applyUpgrade(UUID userId, int newEffectiveLimit, UUID subscriptionId) {
+    public void applyUpgrade(UUID userId, Plan newPlan, int newEffectiveLimit, UUID subscriptionId) {
         UserQuota q = getOrCreate(userId);
         q.setAiLimit(newEffectiveLimit);
         q.setEffectiveAiLimit(newEffectiveLimit);
+        // FIX: cập nhật planId + nominal NGAY (không đợi sync — sync không kích hoạt vì subscriptionId đã khớp).
+        q.setNominalAiLimit(aiLimitOf(newPlan));
+        q.setPlanId(newPlan != null ? newPlan.getId() : null);
         q.setSubscriptionId(subscriptionId);
-        // planId sẽ được cập nhật ở lần syncQuotaToCurrentPlan hoặc applyPlanSnapshot kế tiếp.
         // KHÔNG đụng aiUsed và resetAt — giữ used & kỳ hiện tại (BR-UPGRADE-05/06).
         userQuotaRepository.save(q);
     }

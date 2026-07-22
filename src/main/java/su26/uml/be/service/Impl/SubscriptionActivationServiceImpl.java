@@ -116,7 +116,7 @@ public class SubscriptionActivationServiceImpl implements SubscriptionActivation
 
         // Quota: giữ used, set effective limit theo quote (fallback nominal gói mới nếu thiếu snapshot).
         int newLimit = tx.getNewEffectiveLimit() != null ? tx.getNewEffectiveLimit() : aiLimitOf(target);
-        quotaService.applyUpgrade(user.getId(), newLimit, sub.getId());
+        quotaService.applyUpgrade(user.getId(), target, newLimit, sub.getId());
     }
 
     private int periodDaysOf(Plan plan) {
