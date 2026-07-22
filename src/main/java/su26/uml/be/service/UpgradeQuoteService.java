@@ -1,6 +1,8 @@
 package su26.uml.be.service;
 
+import su26.uml.be.dto.subscription.QuotePairResponse;
 import su26.uml.be.dto.subscription.UpgradeQuoteResponse;
+import su26.uml.be.enums.UpgradeMode;
 
 import java.util.UUID;
 
@@ -11,6 +13,9 @@ import java.util.UUID;
  */
 public interface UpgradeQuoteService {
 
-    /** Báo giá nâng lên {@code targetPlanId} cho user (theo email). Ném lỗi nếu không đủ điều kiện. */
-    UpgradeQuoteResponse getQuote(String email, UUID targetPlanId);
+    /** Báo giá nâng lên {@code targetPlanId} cho 1 mode cụ thể (PRORATED hoặc DIRECT). */
+    UpgradeQuoteResponse getQuote(String email, UUID targetPlanId, UpgradeMode mode);
+
+    /** Báo giá cả 2 mode (PRORATED + DIRECT) trong 1 lần gọi. */
+    QuotePairResponse getQuotePair(String email, UUID targetPlanId);
 }

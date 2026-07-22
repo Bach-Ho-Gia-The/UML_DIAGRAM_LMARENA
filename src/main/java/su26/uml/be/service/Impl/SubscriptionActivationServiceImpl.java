@@ -15,6 +15,7 @@ import su26.uml.be.enums.PaymentStatus;
 import su26.uml.be.enums.PaymentTransactionType;
 import su26.uml.be.enums.PlanFeatureKey;
 import su26.uml.be.enums.SubscriptionStatus;
+import su26.uml.be.enums.UpgradeMode;
 import su26.uml.be.exception.AppException;
 import su26.uml.be.exception.ErrorCode;
 import su26.uml.be.repository.PaymentTransactionRepository;
@@ -86,16 +87,24 @@ public class SubscriptionActivationServiceImpl implements SubscriptionActivation
         quotaService.resetOnPlanChange(user.getId());
     }
 
-    /** Nâng cấp giữa kỳ: thay sub cũ (REPLACED), giữ nguyên kỳ (không kéo dài), quota giữ used. */
+    /** Nâng cấp giữa kỳ: thay sub cũ (REPLACED). Tuỳ upgradeMode mà reset toàn bộ hay giữ used. */
     private void activateUpgrade(User user, PaymentTransaction tx) {
         LocalDateTime now = LocalDateTime.now();
         Plan target = tx.getPlan();
+        UpgradeMode mode = tx.getUpgradeMode();
 
         Subscription oldSub = subscriptionAccessService.getActiveSubscription(user.getId(), now).orElse(null);
-        LocalDateTime end = oldSub != null ? oldSub.getEndDate() : now.plusDays(periodDaysOf(target));
         if (oldSub != null) {
             oldSub.setStatus(SubscriptionStatus.REPLACED);
             subscriptionRepository.save(oldSub);
+        }
+
+        // DIRECT: kỳ mới (endDate = now + periodDays). PRORATED/NULL: giữ nguyên kỳ cũ.
+        LocalDateTime end;
+        if (mode == UpgradeMode.DIRECT) {
+            end = now.plusDays(periodDaysOf(target));
+        } else {
+            end = oldSub != null ? oldSub.getEndDate() : now.plusDays(periodDaysOf(target));
         }
 
         Subscription sub = Subscription.builder()
@@ -103,8 +112,8 @@ public class SubscriptionActivationServiceImpl implements SubscriptionActivation
                 .plan(target)
                 .status(SubscriptionStatus.ACTIVE)
                 .startDate(now)
-                .endDate(end) // BR-UPGRADE-06: không kéo dài kỳ
-                .billingPriceSnapshot(target.getPrice()) // giá full gói mới → nền cho lần upgrade sau
+                .endDate(end)
+                .billingPriceSnapshot(target.getPrice())
                 .currencySnapshot(target.getCurrency())
                 .billingCycleSnapshot("MONTHLY")
                 .nominalAiLimitSnapshot(aiLimitOf(target))
@@ -114,9 +123,14 @@ public class SubscriptionActivationServiceImpl implements SubscriptionActivation
         user.setCurrentSubscription(sub);
         userRepository.save(user);
 
-        // Quota: giữ used, set effective limit theo quote (fallback nominal gói mới nếu thiếu snapshot).
-        int newLimit = tx.getNewEffectiveLimit() != null ? tx.getNewEffectiveLimit() : aiLimitOf(target);
-        quotaService.applyUpgrade(user.getId(), target, newLimit, sub.getId());
+        if (mode == UpgradeMode.DIRECT) {
+            // Reset toàn bộ quota như mua mới (used = 0, limit = full gói mới, kỳ quota mới)
+            quotaService.resetOnPlanChange(user.getId());
+        } else {
+            // PRORATED: giữ used, set effective limit theo quote
+            int newLimit = tx.getNewEffectiveLimit() != null ? tx.getNewEffectiveLimit() : aiLimitOf(target);
+            quotaService.applyUpgrade(user.getId(), target, newLimit, sub.getId());
+        }
     }
 
     private int periodDaysOf(Plan plan) {

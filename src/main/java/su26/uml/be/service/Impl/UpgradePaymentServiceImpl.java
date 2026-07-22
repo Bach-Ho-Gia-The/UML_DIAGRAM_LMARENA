@@ -14,6 +14,7 @@ import su26.uml.be.entity.Subscription;
 import su26.uml.be.entity.User;
 import su26.uml.be.enums.PaymentStatus;
 import su26.uml.be.enums.PaymentTransactionType;
+import su26.uml.be.enums.UpgradeMode;
 import su26.uml.be.exception.AppException;
 import su26.uml.be.exception.ErrorCode;
 import su26.uml.be.repository.PaymentTransactionRepository;
@@ -42,10 +43,9 @@ public class UpgradePaymentServiceImpl implements UpgradePaymentService {
 
     @Override
     @Transactional
-    public PaymentResponse createIntentPayment(User user, UUID targetPlanId, String returnUrl, String cancelUrl) {
+    public PaymentResponse createIntentPayment(User user, UUID targetPlanId, String returnUrl, String cancelUrl, UpgradeMode upgradeMode) {
         UUID userId = user.getId();
 
-        // Chặn giao dịch chờ trùng (một pending / user).
         if (paymentTransactionRepository.existsByUser_IdAndStatus(userId, PaymentStatus.PENDING)) {
             throw new AppException(ErrorCode.PENDING_PAYMENT_EXISTS);
         }
@@ -61,13 +61,12 @@ public class UpgradePaymentServiceImpl implements UpgradePaymentService {
 
         PaymentTransaction tx = current == null
                 ? buildNewPurchase(user, target)
-                : buildUpgrade(user, target, current);
+                : buildUpgrade(user, target, current, upgradeMode);
 
         paymentTransactionRepository.save(tx);
         return paymentService.createPayosLink(tx, returnUrl, cancelUrl);
     }
 
-    /** Không có paid sub effective → mua mới (BR-PURCHASE-01). */
     private PaymentTransaction buildNewPurchase(User user, Plan target) {
         return baseTx(user, target, PaymentTransactionType.NEW_SUBSCRIPTION, target.getPrice())
                 .targetPlanId(target.getId())
@@ -75,8 +74,7 @@ public class UpgradePaymentServiceImpl implements UpgradePaymentService {
                 .build();
     }
 
-    /** Có paid sub → chặn same-plan/downgrade, còn lại là upgrade (dùng quote để snapshot). */
-    private PaymentTransaction buildUpgrade(User user, Plan target, Subscription current) {
+    private PaymentTransaction buildUpgrade(User user, Plan target, Subscription current, UpgradeMode mode) {
         Plan currentPlan = current.getPlan();
         if (Objects.equals(currentPlan.getId(), target.getId())) {
             throw new AppException(ErrorCode.SUBSCRIPTION_ALREADY_ACTIVE);
@@ -91,9 +89,10 @@ public class UpgradePaymentServiceImpl implements UpgradePaymentService {
             throw new AppException(ErrorCode.SUBSCRIPTION_ALREADY_ACTIVE);
         }
 
-        UpgradeQuoteResponse q = upgradeQuoteService.getQuote(user.getEmail(), target.getId());
+        UpgradeQuoteResponse q = upgradeQuoteService.getQuote(user.getEmail(), target.getId(), mode);
 
         return baseTx(user, target, PaymentTransactionType.UPGRADE, q.getAmountToPay())
+                .upgradeMode(mode)
                 .sourceSubscriptionId(current.getId())
                 .sourcePlanId(currentPlan.getId())
                 .targetPlanId(target.getId())
@@ -111,7 +110,6 @@ public class UpgradePaymentServiceImpl implements UpgradePaymentService {
                 .build();
     }
 
-    /** Khởi tạo transaction chung (orderCode + user + plan + amount + PENDING). */
     private PaymentTransaction.PaymentTransactionBuilder<?, ?> baseTx(
             User user, Plan plan, PaymentTransactionType type, BigDecimal amount) {
         return PaymentTransaction.builder()
@@ -124,7 +122,6 @@ public class UpgradePaymentServiceImpl implements UpgradePaymentService {
                 .createdAt(LocalDateTime.now());
     }
 
-    /** epoch giây (10) + 2 số random = ≤12 chữ số, dưới JS MAX_SAFE_INTEGER của PayOS. */
     private Long generateOrderCode() {
         String randomSuffix = String.format("%02d", new java.util.Random().nextInt(100));
         long epochSeconds = System.currentTimeMillis() / 1000;

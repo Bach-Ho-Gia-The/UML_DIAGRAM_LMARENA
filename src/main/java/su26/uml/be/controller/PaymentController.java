@@ -39,7 +39,7 @@ public class PaymentController {
         }
         User user = userRepository.findByEmail(userDetails.getUsername())
                 .orElseThrow(() -> new AppException(ErrorCode.USER_NOT_EXISTED));
-        PaymentResponse response = upgradePaymentService.createIntentPayment(user, request.getPlanId(), request.getReturnUrl(), request.getCancelUrl());
+        PaymentResponse response = upgradePaymentService.createIntentPayment(user, request.getPlanId(), request.getReturnUrl(), request.getCancelUrl(), request.getUpgradeMode());
         return ResponseEntity.ok(ApiResponse.success("Tạo link thanh toán thành công", response));
     }
 

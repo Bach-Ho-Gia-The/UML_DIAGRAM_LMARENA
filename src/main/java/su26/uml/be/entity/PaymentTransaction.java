@@ -5,6 +5,7 @@ import lombok.*;
 import lombok.experimental.FieldDefaults;
 import lombok.experimental.SuperBuilder;
 import su26.uml.be.enums.PaymentStatus;
+import su26.uml.be.enums.UpgradeMode;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -89,4 +90,8 @@ public class PaymentTransaction extends BaseEntity {
 
     @Column(name = "quote_expires_at")
     LocalDateTime quoteExpiresAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "upgrade_mode", length = 20)
+    UpgradeMode upgradeMode;
 }

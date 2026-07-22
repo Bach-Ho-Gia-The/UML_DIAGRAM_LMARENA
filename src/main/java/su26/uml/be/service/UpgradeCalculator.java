@@ -28,7 +28,7 @@ import java.time.LocalDateTime;
 public class UpgradeCalculator {
 
     public UpgradeQuoteResponse calculate(SubscriptionSnapshot current, PlanSnapshot target,
-                                          QuotaSnapshot quota, LocalDateTime now) {
+                                           QuotaSnapshot quota, LocalDateTime now) {
         if (current.getTierOrder() == null || target.getTierOrder() == null) {
             throw new AppException(ErrorCode.PLAN_TIER_NOT_CONFIGURED);
         }
@@ -36,10 +36,14 @@ public class UpgradeCalculator {
             throw new AppException(ErrorCode.UPGRADE_TARGET_NOT_HIGHER_TIER);
         }
 
-        long billingTotal = seconds(current.getPeriodStart(), current.getPeriodEnd());
+        // billingTotalDays = kỳ gốc từ plan (30), KHÔNG thay đổi sau upgrade prorated (fix: không thu hẹp)
+        int totalDays = current.getBillingTotalDays() > 0 ? current.getBillingTotalDays() : 30;
+        long billingTotal = (long) totalDays * 86400L;
         long billingRemaining = clampRemaining(now, current.getPeriodEnd(), billingTotal);
         long quotaTotal = seconds(quota.getPeriodStart(), quota.getPeriodEnd());
         long quotaRemaining = clampRemaining(now, quota.getPeriodEnd(), quotaTotal);
+
+        BigDecimal billingRemainingRatio = ratioForDisplay(billingRemaining, billingTotal);
 
         BigDecimal priceDifference = target.getPrice().subtract(current.getPrice());
         // amountToPay = priceDiff × billingRemaining / billingTotal (HALF_UP, scale 0)
@@ -64,6 +68,12 @@ public class UpgradeCalculator {
         int newEffectiveLimit = quota.getEffectiveLimit() + quotaDelta;
         int availableAfterUpgrade = Math.max(0, newEffectiveLimit - quota.getUsed());
 
+        // billingRemainingDays = round(ratio × totalDays) để khớp với % hiển thị
+        int displayRemainingDays = billingRemainingRatio
+                .multiply(BigDecimal.valueOf(totalDays))
+                .setScale(0, RoundingMode.HALF_UP)
+                .intValue();
+
         return UpgradeQuoteResponse.builder()
                 .targetPlanId(target.getPlanId())
                 .currentTierOrder(current.getTierOrder())
@@ -72,10 +82,10 @@ public class UpgradeCalculator {
                 .oldPrice(current.getPrice())
                 .newPrice(target.getPrice())
                 .priceDifference(priceDifference)
-                .billingRemainingRatio(ratioForDisplay(billingRemaining, billingTotal))
+                .billingRemainingRatio(billingRemainingRatio)
                 .quotaRemainingRatio(ratioForDisplay(quotaRemaining, quotaTotal))
-                .billingRemainingDays((int) (billingRemaining / 86400))
-                .billingTotalDays((int) (billingTotal / 86400))
+                .billingRemainingDays(displayRemainingDays)
+                .billingTotalDays(totalDays)
                 .amountToPay(amountToPay)
                 .oldNominalQuota(current.getNominalAiLimit())
                 .newNominalQuota(target.getNominalAiLimit())
@@ -95,6 +105,42 @@ public class UpgradeCalculator {
         if (remaining < 0) return 0;
         if (remaining > total) return total;
         return remaining;
+    }
+
+    /**
+     * Nâng cấp thẳng (direct): user trả full tiền gói đích, reset toàn bộ quota như mua mới.
+     * Không prorate gì — amountToPay = giá gói đích, newEffectiveLimit = nominal gói đích,
+     * billingRemainingRatio = 1.0 (full kỳ), quotaDelta = chênh lệch nominal.
+     */
+    public UpgradeQuoteResponse calculateDirect(SubscriptionSnapshot current, PlanSnapshot target, int periodDays) {
+        if (current.getTierOrder() == null || target.getTierOrder() == null) {
+            throw new AppException(ErrorCode.PLAN_TIER_NOT_CONFIGURED);
+        }
+        if (target.getTierOrder() <= current.getTierOrder()) {
+            throw new AppException(ErrorCode.UPGRADE_TARGET_NOT_HIGHER_TIER);
+        }
+
+        BigDecimal priceDifference = target.getPrice().subtract(current.getPrice());
+
+        return UpgradeQuoteResponse.builder()
+                .targetPlanId(target.getPlanId())
+                .currentTierOrder(current.getTierOrder())
+                .targetTierOrder(target.getTierOrder())
+                .currency(target.getCurrency())
+                .oldPrice(current.getPrice())
+                .newPrice(target.getPrice())
+                .priceDifference(priceDifference)
+                .billingRemainingRatio(BigDecimal.ONE)
+                .quotaRemainingRatio(BigDecimal.ONE)
+                .billingRemainingDays(periodDays)
+                .billingTotalDays(periodDays)
+                .amountToPay(target.getPrice())
+                .oldNominalQuota(current.getNominalAiLimit())
+                .newNominalQuota(target.getNominalAiLimit())
+                .quotaDelta(target.getNominalAiLimit() - current.getNominalAiLimit())
+                .newEffectiveLimit(target.getNominalAiLimit())
+                .availableAfterUpgrade(target.getNominalAiLimit())
+                .build();
     }
 
     /** Tỉ lệ hiển thị (scale 6) — chỉ để show cho FE, KHÔNG dùng để tính tiền/quota. */

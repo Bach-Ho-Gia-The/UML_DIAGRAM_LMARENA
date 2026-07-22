@@ -2,6 +2,7 @@ package su26.uml.be.service;
 
 import su26.uml.be.dto.payment.PaymentResponse;
 import su26.uml.be.entity.User;
+import su26.uml.be.enums.UpgradeMode;
 
 import java.util.UUID;
 
@@ -12,5 +13,5 @@ import java.util.UUID;
 public interface UpgradePaymentService {
 
     /** Tạo link thanh toán cho gói đích (BE tự quyết mua mới hay nâng cấp + số tiền). */
-    PaymentResponse createIntentPayment(User user, UUID targetPlanId, String returnUrl, String cancelUrl);
+    PaymentResponse createIntentPayment(User user, UUID targetPlanId, String returnUrl, String cancelUrl, UpgradeMode upgradeMode);
 }
