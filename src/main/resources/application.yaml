@@ -158,3 +158,5 @@ management:
   health:
     defaults:
       enabled: true
+    mongodb:
+      enabled: false
