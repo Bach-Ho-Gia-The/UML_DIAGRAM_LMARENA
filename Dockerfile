@@ -10,8 +10,8 @@ FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY --from=build /app/target/*.jar app.jar
 
-# Giới hạn RAM tối đa 350MB và ưu tiên IPv4
-ENV JAVA_OPTS="-XX:+UseContainerSupport -Xms150m -Xmx350m -XX:+UseG1GC -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true"
+# Tối ưu RAM cho gói 512MB: Dùng SerialGC, giới hạn Heap 256MB, Metaspace 128MB
+ENV JAVA_OPTS="-XX:+UseContainerSupport -Xms100m -Xmx256m -Xss256k -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC -Djava.net.preferIPv4Stack=true -Djava.net.preferIPv4Addresses=true"
 
 EXPOSE 8088
 
