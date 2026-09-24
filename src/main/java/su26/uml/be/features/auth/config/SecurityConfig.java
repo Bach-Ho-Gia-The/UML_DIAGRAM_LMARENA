@@ -117,7 +117,9 @@ public class SecurityConfig {
                 "http://127.0.0.1:*",
                 "https://*.ngrok-free.app",
                 "https://*.up.railway.app",
-                "https://*.vercel.app"
+                "https://*.vercel.app",
+                "https://diauml.id.vn",
+                "https://*.diauml.id.vn"
         ));
         config.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(Arrays.asList("*"));
