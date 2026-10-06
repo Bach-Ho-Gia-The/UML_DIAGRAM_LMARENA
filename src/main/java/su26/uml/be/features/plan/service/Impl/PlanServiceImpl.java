@@ -219,10 +219,9 @@ public class PlanServiceImpl implements PlanService {
             throw new AppException(ErrorCode.LAST_DEFAULT_PLAN_DENIED);
         }
 
-        // ── D8: archive gói có subscriber ──
         if (existing != null
-                && status == PlanStatus.ARCHIVED
-                && existing.getStatus() != PlanStatus.ARCHIVED
+                && status != PlanStatus.ACTIVE
+                && existing.getStatus() == PlanStatus.ACTIVE
                 && subscriptionRepository.existsByPlanAndStatus(existing, SubscriptionStatus.ACTIVE)) {
             throw new AppException(ErrorCode.PLAN_HAS_SUBSCRIBERS);
         }
