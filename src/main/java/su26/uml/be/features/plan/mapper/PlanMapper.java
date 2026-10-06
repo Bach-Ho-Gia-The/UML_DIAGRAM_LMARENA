@@ -12,8 +12,10 @@ import java.util.List;
 public interface PlanMapper {
 
     // Scalar fields only; planFeatures (limits) and enabledFeatureIds are assembled in the service.
+    // tierOrder do HỆ THỐNG tự tính (D3) — bỏ qua input từ admin.
     @Mapping(target = "planFeatures", ignore = true)
     @Mapping(target = "enabledFeatureIds", ignore = true)
+    @Mapping(target = "tierOrder", ignore = true)
     Plan toPlan(PlanRequest request);
 
     // `features` (matrix cells) is pre-built in the service from the current catalog + this plan's enabled set.
@@ -26,6 +28,7 @@ public interface PlanMapper {
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "planFeatures", ignore = true)
     @Mapping(target = "enabledFeatureIds", ignore = true)
+    @Mapping(target = "tierOrder", ignore = true)
     void updatePlan(PlanRequest request, @MappingTarget Plan plan);
 
     default PlanResponse.PlanLimits toLimits(List<PlanFeature> features) {

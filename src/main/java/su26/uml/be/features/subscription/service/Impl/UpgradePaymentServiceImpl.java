@@ -10,6 +10,7 @@ import su26.uml.be.features.billing.dto.PaymentResponse;
 import su26.uml.be.features.subscription.dto.UpgradeQuoteResponse;
 import su26.uml.be.features.billing.entity.PaymentTransaction;
 import su26.uml.be.features.plan.entity.Plan;
+import su26.uml.be.common.constant.enums.PlanStatus;
 import su26.uml.be.features.subscription.entity.Subscription;
 import su26.uml.be.features.user.entity.User;
 import su26.uml.be.common.constant.enums.PaymentStatus;
@@ -18,6 +19,7 @@ import su26.uml.be.common.constant.enums.UpgradeMode;
 import su26.uml.be.common.exception.AppException;
 import su26.uml.be.common.exception.ErrorCode;
 import su26.uml.be.features.billing.repository.PaymentTransactionRepository;
+import su26.uml.be.features.subscription.repository.SubscriptionRepository;
 import su26.uml.be.features.plan.repository.PlanRepository;
 import su26.uml.be.features.billing.service.PaymentService;
 import su26.uml.be.features.subscription.service.SubscriptionAccessService;
@@ -36,6 +38,7 @@ import java.util.UUID;
 public class UpgradePaymentServiceImpl implements UpgradePaymentService {
 
     PaymentTransactionRepository paymentTransactionRepository;
+    SubscriptionRepository subscriptionRepository;
     PlanRepository planRepository;
     SubscriptionAccessService subscriptionAccessService;
     UpgradeQuoteService upgradeQuoteService;
@@ -55,9 +58,21 @@ public class UpgradePaymentServiceImpl implements UpgradePaymentService {
         if (target.getTierOrder() == null) {
             throw new AppException(ErrorCode.PLAN_TIER_NOT_CONFIGURED);
         }
+        if (target.getStatus() != PlanStatus.ACTIVE) {
+            // Không bán gói DRAFT/ARCHIVED — kể cả khi trước đó đã có người mua.
+            throw new AppException(ErrorCode.PLAN_NOT_ACTIVE);
+        }
+        // T17 (V3): gói báo giá có price = null — amount của PayOS sẽ null → chặn trước.
+        if (target.isContactSales()) {
+            throw new AppException(ErrorCode.PLAN_CONTACT_SALES_REQUIRED);
+        }
 
         LocalDateTime now = LocalDateTime.now();
         Subscription current = subscriptionAccessService.getActiveSubscription(userId, now).orElse(null);
+        if (current != null && current.getPlan().isContactSales()) {
+            // Đang ở gói báo giá: không thể tự nâng/hạ trực tuyến — phải liên hệ sales.
+            throw new AppException(ErrorCode.PLAN_CONTACT_SALES_REQUIRED);
+        }
 
         PaymentTransaction tx = current == null
                 ? buildNewPurchase(user, target)
@@ -82,11 +97,21 @@ public class UpgradePaymentServiceImpl implements UpgradePaymentService {
         if (currentPlan.getTierOrder() == null) {
             throw new AppException(ErrorCode.PLAN_TIER_NOT_CONFIGURED);
         }
+        // T17: hạ gói KHÔNG còn bị chặn "DOWNGRADE_NOT_ALLOWED_WHILE_ACTIVE" — hướng user sang
+        // endpoint hạ cấp (booked downgrade). Cùng bậc nhưng khác gói = đang dùng gói bậc đó.
         if (target.getTierOrder() < currentPlan.getTierOrder()) {
-            throw new AppException(ErrorCode.DOWNGRADE_NOT_ALLOWED_WHILE_ACTIVE);
+            throw new AppException(ErrorCode.USE_UPGRADE_ENDPOINT);
         }
         if (target.getTierOrder().equals(currentPlan.getTierOrder())) {
             throw new AppException(ErrorCode.SUBSCRIPTION_ALREADY_ACTIVE);
+        }
+
+        // T17 (C7 §C): user vừa kích hoạt nâng cấp → xoá mọi thay đổi pending (hạ cấp đã đặt)
+        // trên subscription hiện tại, tránh trạng thái "vừa pending hạ, vừa lên gói mới".
+        if (current.getPendingPlanId() != null || current.getPendingEffectiveAt() != null) {
+            current.setPendingPlanId(null);
+            current.setPendingEffectiveAt(null);
+            subscriptionRepository.save(current);
         }
 
         UpgradeQuoteResponse q = upgradeQuoteService.getQuote(user.getEmail(), target.getId(), mode);

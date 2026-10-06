@@ -2,15 +2,12 @@ package su26.uml.be.features.plan.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.PositiveOrZero;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.FieldDefaults;
-import su26.uml.be.common.constant.enums.PlanStatus;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -31,16 +28,16 @@ public class PlanRequest {
     @Schema(example = "For power users")
     String description;
 
-    @NotNull(message = "PLAN_PRICE_REQUIRED")
-    @PositiveOrZero(message = "PLAN_PRICE_INVALID")
-    @Schema(example = "300000")
+    /**
+     * Giá gói (VND). NULLABLE: bắt buộc null khi {@code contactSales = true} (gói báo giá);
+     * bắt buộc có giá &gt;= 0 khi {@code contactSales = false}. Validate ở service (D2).
+     */
+    @Schema(description = "Giá gói (VND). Bắt buộc null khi contactSales=true; bắt buộc >= 0 khi contactSales=false.",
+            example = "300000")
     BigDecimal price;
 
     @Schema(description = "Currency code; defaults to VND when omitted.", example = "VND")
     String currency;
-
-    @Schema(description = "active | draft | archived; defaults to draft when omitted.", example = "active")
-    PlanStatus status;
 
     @Schema(example = "true")
     Boolean popular;
@@ -54,7 +51,8 @@ public class PlanRequest {
     @Schema(description = "Yearly discount percentage.", example = "20")
     Integer yearlyDiscount;
 
-    @Schema(description = "Show \"Liên hệ báo giá\" instead of a price (Enterprise). Distinct from price = 0.", example = "false")
+    @Schema(description = "Show \"Liên hệ báo giá\" instead of a price (Enterprise). Distinct from price = 0. "
+            + "Khi true, price bị hệ thống ép về null.", example = "false")
     Boolean contactSales;
 
     @Schema(description = "Billing period length in days.", example = "30")
@@ -74,11 +72,9 @@ public class PlanRequest {
             example = "[\"a1b2c3d4-...\", \"e5f6a7b8-...\"]")
     List<UUID> enabledFeatureIds;
 
-    @Schema(description = "Mark as the base/fallback plan (only one allowed).", example = "true")
-    Boolean isBasePlan;
-
-    @Schema(description = "Tier ordering: 0 = base, 1, 2, 3... Must be unique across plans.", example = "0")
-    Integer tierOrder;
+    @Schema(description = "Đánh dấu gói mặc định của hệ thống (đúng 1 gói ACTIVE tại mọi thời điểm). "
+            + "User chưa có subscription dùng gói này làm entitlements.", example = "true")
+    Boolean isDefaultPlan;
 
     @Schema(description = "Billing cycle (MONTHLY / YEARLY).", example = "MONTHLY")
     String billingCycle;

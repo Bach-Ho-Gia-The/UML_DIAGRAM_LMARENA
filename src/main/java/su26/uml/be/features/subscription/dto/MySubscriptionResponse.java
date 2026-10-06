@@ -27,4 +27,17 @@ public class MySubscriptionResponse {
     LocalDateTime endDate;
     /** True = đã hủy gia hạn (vẫn Premium tới endDate). */
     Boolean cancelAtPeriodEnd;
+
+    // ─── Booked downgrade (hướng A) ───
+    /** Gói sẽ chuyển sang khi hết kỳ (hạ cấp đã đặt). Không thu tiền ngay. */
+    UUID pendingPlanId;
+
+    /** Tên gói sẽ chuyển sang — FE hiện banner "Ngày X bạn sẽ chuyển sang gói Y". */
+    String pendingPlanName;
+
+    /** Giá gói sẽ chuyển sang (null nếu gói báo giá). */
+    java.math.BigDecimal pendingPrice;
+
+    /** Thời điểm pendingPlanId có hiệu lực (= endDate kỳ hiện tại). */
+    LocalDateTime pendingEffectiveAt;
 }

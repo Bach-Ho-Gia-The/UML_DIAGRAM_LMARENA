@@ -29,12 +29,7 @@ public class UpgradeCalculator {
 
     public UpgradeQuoteResponse calculate(SubscriptionSnapshot current, PlanSnapshot target,
                                            QuotaSnapshot quota, LocalDateTime now) {
-        if (current.getTierOrder() == null || target.getTierOrder() == null) {
-            throw new AppException(ErrorCode.PLAN_TIER_NOT_CONFIGURED);
-        }
-        if (target.getTierOrder() <= current.getTierOrder()) {
-            throw new AppException(ErrorCode.UPGRADE_TARGET_NOT_HIGHER_TIER);
-        }
+        validateUpgradeable(current, target);
 
         // billingTotalDays = kỳ gốc từ plan (30), KHÔNG thay đổi sau upgrade prorated (fix: không thu hẹp)
         int totalDays = current.getBillingTotalDays() > 0 ? current.getBillingTotalDays() : 30;
@@ -45,7 +40,7 @@ public class UpgradeCalculator {
 
         BigDecimal billingRemainingRatio = ratioForDisplay(billingRemaining, billingTotal);
 
-        BigDecimal priceDifference = target.getPrice().subtract(current.getPrice());
+        BigDecimal priceDifference = target.getPrice().subtract(currentPriceOf(current));
         // amountToPay = priceDiff × billingRemaining / billingTotal (HALF_UP, scale 0)
         BigDecimal amountToPay = billingTotal <= 0
                 ? BigDecimal.ZERO
@@ -99,6 +94,38 @@ public class UpgradeCalculator {
         return Duration.between(a, b).getSeconds();
     }
 
+    /**
+     * Guard chung cho MỌI flow quote/upgrade (T16):
+     * <ul>
+     *   <li>tierOrder chưa cấu hình → PLAN_TIER_NOT_CONFIGURED</li>
+     *   <li>gói đích không cao hơn gói hiện tại → UPGRADE_TARGET_NOT_HIGHER_TIER</li>
+     *   <li>một trong hai đầu là gói báo giá (contactSales, price = null) → PLAN_CONTACT_SALES_REQUIRED</li>
+     *   <li>target.getPrice() = null (chỉ xảy ra với contactSales) → PLAN_CONTACT_SALES_REQUIRED (chặn NPE)</li>
+     * </ul>
+     */
+    private void validateUpgradeable(SubscriptionSnapshot current, PlanSnapshot target) {
+        if (current.getTierOrder() == null || target.getTierOrder() == null) {
+            throw new AppException(ErrorCode.PLAN_TIER_NOT_CONFIGURED);
+        }
+        if (target.getTierOrder() <= current.getTierOrder()) {
+            throw new AppException(ErrorCode.UPGRADE_TARGET_NOT_HIGHER_TIER);
+        }
+        if (Boolean.TRUE.equals(target.getContactSales()) || Boolean.TRUE.equals(current.getContactSales())) {
+            throw new AppException(ErrorCode.PLAN_CONTACT_SALES_REQUIRED);
+        }
+        if (target.getPrice() == null) {
+            throw new AppException(ErrorCode.PLAN_CONTACT_SALES_REQUIRED);
+        }
+    }
+
+    /**
+     * Giá gói hiện tại an toàn cho subtract: snapshot cũ (trước khi có cột price nullable) có thể
+     * thiếu cả billingPriceSnapshot lẫn plan.price → coi như 0 để vẫn tính được chênh lệch.
+     */
+    private BigDecimal currentPriceOf(SubscriptionSnapshot current) {
+        return current.getPrice() != null ? current.getPrice() : BigDecimal.ZERO;
+    }
+
     /** Giây còn lại từ now→end, kẹp về [0, total]. */
     private long clampRemaining(LocalDateTime now, LocalDateTime end, long total) {
         long remaining = seconds(now, end);
@@ -113,14 +140,9 @@ public class UpgradeCalculator {
      * billingRemainingRatio = 1.0 (full kỳ), quotaDelta = chênh lệch nominal.
      */
     public UpgradeQuoteResponse calculateDirect(SubscriptionSnapshot current, PlanSnapshot target, int periodDays) {
-        if (current.getTierOrder() == null || target.getTierOrder() == null) {
-            throw new AppException(ErrorCode.PLAN_TIER_NOT_CONFIGURED);
-        }
-        if (target.getTierOrder() <= current.getTierOrder()) {
-            throw new AppException(ErrorCode.UPGRADE_TARGET_NOT_HIGHER_TIER);
-        }
+        validateUpgradeable(current, target);
 
-        BigDecimal priceDifference = target.getPrice().subtract(current.getPrice());
+        BigDecimal priceDifference = target.getPrice().subtract(currentPriceOf(current));
 
         return UpgradeQuoteResponse.builder()
                 .targetPlanId(target.getPlanId())

@@ -10,16 +10,21 @@ import lombok.experimental.FieldDefaults;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.validation.Valid;
 import su26.uml.be.common.response.ApiResponse;
+import su26.uml.be.features.subscription.dto.DowngradeRequest;
 import su26.uml.be.features.subscription.dto.MySubscriptionResponse;
 import su26.uml.be.features.subscription.service.SubscriptionService;
 
 /**
- * Hủy / hoàn tác gia hạn + xem subscription hiện tại. Hủy = graceful downgrade
- * (giữ Premium tới hết kỳ, sau đó về gói base).
+ * Hủy / hoàn tác gia hạn + xem subscription hiện tại + hạ cấp có kỳ hạn (booked downgrade).
+ * Hủy = graceful downgrade (giữ Premium tới hết kỳ, sau đó về gói base).
+ * Hạ cấp trả phí = booked downgrade (pendingPlanId, không thu tiền ngay).
  */
 @RestController
 @RequiredArgsConstructor
@@ -52,5 +57,29 @@ public class SubscriptionController {
     public ApiResponse<MySubscriptionResponse> reactivate(
             @Parameter(hidden = true) @AuthenticationPrincipal UserDetails userDetails) {
         return ApiResponse.success("Đã bật lại gia hạn", subscriptionService.reactivate(userDetails.getUsername()));
+    }
+
+    @PostMapping("/subscriptions/downgrade")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    @Operation(summary = "Đặt hạ cấp có kỳ hạn (booked downgrade)",
+            description = "Ghi pendingPlanId + pendingEffectiveAt (= endDate kỳ hiện tại). KHÔNG thu tiền, "
+                    + "KHÔNG đổi quyền ngay — user vẫn dùng gói cũ tới hết kỳ. Hạ về gói mặc định "
+                    + "(isDefaultPlan) thì coi như hủy gia hạn (cancelAtPeriodEnd = true). "
+                    + "Gói đích phải ACTIVE, bậc thấp hơn gói hiện tại, không phải gói báo giá.")
+    public ApiResponse<MySubscriptionResponse> downgrade(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserDetails userDetails,
+            @Valid @RequestBody DowngradeRequest request) {
+        return ApiResponse.success("Đã đặt hạ cấp",
+                subscriptionService.scheduleDowngrade(userDetails.getUsername(), request.getTargetPlanId()));
+    }
+
+    @DeleteMapping("/subscriptions/pending-change")
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN')")
+    @Operation(summary = "Huỷ thay đổi gói đang chờ",
+            description = "Xoá pendingPlanId/pendingEffectiveAt — giữ nguyên gói hiện tại tới hết kỳ.")
+    public ApiResponse<MySubscriptionResponse> cancelPendingChange(
+            @Parameter(hidden = true) @AuthenticationPrincipal UserDetails userDetails) {
+        return ApiResponse.success("Đã huỷ thay đổi đang chờ",
+                subscriptionService.cancelPendingChange(userDetails.getUsername()));
     }
 }

@@ -26,7 +26,8 @@ public class Plan extends BaseEntity {
     @Column(nullable = false, unique = true)
     String name;
 
-    @Column(nullable = false, precision = 10, scale = 2, columnDefinition = "decimal(10,2) check (price >= 0)")
+    /** Giá gói (VND). NULLABLE: contactSales=true ⇒ price = null (Enterprise báo giá). price >= 0 khi có giá. */
+    @Column(precision = 10, scale = 2, columnDefinition = "decimal(10,2) check (price >= 0)")
     BigDecimal price;
 
     @Column(nullable = false, length = 10, columnDefinition = "varchar(10) default 'VND'")
@@ -75,8 +76,11 @@ public class Plan extends BaseEntity {
     Integer rateLimitPerMin;
 
     // ─── Subscription Phase 1 (Chặng 1A, additive nullable) ───
-    /** Thứ bậc gói: 0 = Base/Free … 3 = Pro. Nguồn chuẩn để so nâng/hạ gói (KHÔNG suy theo giá/tên). */
-    @Column(name = "tier_order", unique = true)
+    /**
+     * Thứ bậc gói: 0 = Base/Free … n. Hệ thống TỰ TÍNH (admin không nhập) theo thứ tự:
+     * isDefaultPlan → contactSales → price ASC NULLS LAST → createdAt ASC (xem D4 trong planning).
+     */
+    @Column(name = "tier_order")
     Integer tierOrder;
 
     /** MONTHLY (Phase 1 cố định). Additive — chưa thay thế durationDays/yearlyBilling cho tới khi chốt F3. */
@@ -87,9 +91,14 @@ public class Plan extends BaseEntity {
     @Column(name = "quota_period_days")
     Integer quotaPeriodDays;
 
-    /** True if this is the base/fallback plan (one per system). New users without a subscription get this plan's quota. */
-    @Column(name = "is_base_plan", unique = true)
-    Boolean isBasePlan;
+    /**
+     * True = gói mặc định của hệ thống (đúng 1 gói ACTIVE tại mọi thời điểm). User chưa có
+     * subscription dùng gói này làm entitlements. KHÔNG còn unique ở DB — check ở tầng service
+     * (DEFAULT_PLAN_ALREADY_EXISTS / LAST_DEFAULT_PLAN_DENIED). false là giá trị hợp lệ.
+     */
+    @Column(name = "is_default_plan", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    Boolean isDefaultPlan = false;
 
     @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default

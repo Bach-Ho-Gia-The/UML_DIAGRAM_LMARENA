@@ -24,6 +24,8 @@ public class SubscriptionSnapshot {
     BigDecimal price;
     String currency;
     int nominalAiLimit;
+    /** Gói báo giá (price = null) — không cho nâng/hạ tự thanh toán. */
+    Boolean contactSales;
     LocalDateTime periodStart;
     LocalDateTime periodEnd;
     /** Số ngày của 1 kỳ thanh toán đầy đủ (lấy từ plan, VD: 30). KHÔNG thay đổi sau upgrade prorated. */

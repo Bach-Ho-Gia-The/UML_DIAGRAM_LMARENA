@@ -7,18 +7,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import su26.uml.be.features.plan.entity.Plan;
-import su26.uml.be.features.subscription.entity.Subscription;
 import su26.uml.be.common.constant.enums.PlanStatus;
-import su26.uml.be.common.constant.enums.SubscriptionStatus;
 import su26.uml.be.common.exception.AppException;
 import su26.uml.be.common.exception.ErrorCode;
 import su26.uml.be.features.plan.repository.PlanRepository;
-import su26.uml.be.features.subscription.repository.SubscriptionRepository;
+import su26.uml.be.features.plan.service.PlanResolutionService;
 import su26.uml.be.features.usage.service.RateLimiterService;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
@@ -28,7 +24,7 @@ import java.util.UUID;
 public class RateLimiterServiceImpl implements RateLimiterService {
 
     StringRedisTemplate redis;
-    SubscriptionRepository subscriptionRepository;
+    PlanResolutionService planResolutionService;
     PlanRepository planRepository;
 
     @Override
@@ -40,9 +36,11 @@ public class RateLimiterServiceImpl implements RateLimiterService {
             per10s = planRepository.findMaxRatePer10s();
             perMin = planRepository.findMaxRatePerMin();
         } else {
-            Plan plan = currentPlan(userId);
-            per10s = plan == null ? null : plan.getRateLimitPer10s();
-            perMin = plan == null ? null : plan.getRateLimitPerMin();
+            // Rate limit cũng theo entitlement snapshot: admin sửa gói (kể cả ACTIVE/ARCHIVED)
+            // không dịch chuyển ngưỡng mà user đang chịu cho tới hết kỳ.
+            PlanResolutionService.Entitlements e = planResolutionService.resolveEntitlements(userId);
+            per10s = e.rateLimitPer10s();
+            perMin = e.rateLimitPerMin();
         }
         hit("rl:" + userId + ":10s", 10, per10s);
         hit("rl:" + userId + ":60s", 60, perMin);
@@ -66,13 +64,4 @@ public class RateLimiterServiceImpl implements RateLimiterService {
         }
     }
 
-    /** Gói hiện tại: subscription ACTIVE (chưa hết hạn) → gói; nếu không có → gói ACTIVE giá thấp nhất. */
-    private Plan currentPlan(UUID userId) {
-        return subscriptionRepository
-                .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, LocalDateTime.now())
-                .map(Subscription::getPlan)
-                .orElseGet(() -> planRepository
-                        .findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE)
-                        .orElse(null));
-    }
 }

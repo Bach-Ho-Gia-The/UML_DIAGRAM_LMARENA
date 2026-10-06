@@ -1,44 +1,39 @@
 package su26.uml.be.initializer;
 
-import org.springframework.boot.CommandLineRunner;
-import org.springframework.core.annotation.Order;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Component;
-
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import su26.uml.be.features.plan.entity.FeatureCatalog;
-import su26.uml.be.features.user.entity.Role;
-import su26.uml.be.features.plan.entity.Plan;
-import su26.uml.be.features.project.entity.Sheet;
-import su26.uml.be.features.subscription.entity.Subscription;
-import su26.uml.be.features.user.entity.User;
-import su26.uml.be.features.workspace.entity.WorkspaceItem;
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.core.annotation.Order;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Component;
 import su26.uml.be.common.constant.enums.PlanFeatureKey;
 import su26.uml.be.common.constant.enums.SubscriptionStatus;
 import su26.uml.be.common.constant.enums.UserStatus;
-import su26.uml.be.features.workspace.mapper.WorkspaceItemMapper;
+import su26.uml.be.features.plan.entity.FeatureCatalog;
+import su26.uml.be.features.plan.entity.Plan;
 import su26.uml.be.features.plan.repository.FeatureCatalogRepository;
-import su26.uml.be.features.user.repository.RoleRepository;
 import su26.uml.be.features.plan.repository.PlanRepository;
+import su26.uml.be.features.plan.service.PlanService;
+import su26.uml.be.features.project.entity.Sheet;
 import su26.uml.be.features.project.repository.SheetRepository;
-import su26.uml.be.features.user.repository.UserRepository;
+import su26.uml.be.features.subscription.entity.Subscription;
 import su26.uml.be.features.subscription.repository.SubscriptionRepository;
+import su26.uml.be.features.user.entity.Role;
+import su26.uml.be.features.user.entity.User;
+import su26.uml.be.features.user.repository.RoleRepository;
+import su26.uml.be.features.user.repository.UserRepository;
+import su26.uml.be.features.workspace.entity.WorkspaceItem;
+import su26.uml.be.features.workspace.mapper.WorkspaceItemMapper;
 import su26.uml.be.features.workspace.repository.WorkspaceItemRepository;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.jdbc.core.JdbcTemplate;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 @Component
 @RequiredArgsConstructor
@@ -47,9 +42,17 @@ import java.util.UUID;
 @Order(2)
 public class DataInitializer implements CommandLineRunner {
 
+    // === CONSTANTS: DEFAULT PLAN UUIDS ===
+    static UUID PLAN_FREE_ID        = UUID.fromString("11111111-1111-1111-1111-111111111111");
+    static UUID PLAN_EDUCATION_ID   = UUID.fromString("22222222-2222-2222-2222-222222222222");
+    static UUID PLAN_STANDARD_ID    = UUID.fromString("33333333-3333-3333-3333-333333333333");
+    static UUID PLAN_PRO_ID         = UUID.fromString("44444444-4444-4444-4444-444444444444");
+
+    // === REPOSITORIES & SERVICES ===
     UserRepository userRepository;
     RoleRepository roleRepository;
     PlanRepository planRepository;
+    PlanService planService;
     FeatureCatalogRepository featureCatalogRepository;
     SheetRepository sheetRepository;
     WorkspaceItemRepository workspaceItemRepository;
@@ -57,170 +60,124 @@ public class DataInitializer implements CommandLineRunner {
     PasswordEncoder passwordEncoder;
     JdbcTemplate jdbcTemplate;
     SubscriptionRepository subscriptionRepository;
-    ObjectMapper objectMapper = new ObjectMapper();
+    ObjectMapper objectMapper;
 
     @Override
     public void run(String... args) {
         log.info("Initializing sample data...");
 
-        // 0. Ensure the ShedLock coordination table exists. It is NOT a JPA entity, so
-        //    ddl-auto=update never creates it, and the JdbcTemplate lock provider does not
-        //    self-create schema... without this the scheduled jobs fail with
-        //    "relation \"shedlock\" does not exist".
+        // 0. Ensure ShedLock coordination table exists
         initShedLockTable();
 
         // 1. Initialize Roles
         Role adminRole = initRole("ADMIN", "System Administrator Role");
-        Role userRole = initRole("USER", "Standard Application User Role");
+        Role userRole  = initRole("USER", "Standard Application User Role");
 
         // 2. Initialize Admin User
         initAdminUser(adminRole);
 
-        // 3. Initialize Plans
+        // 3. Initialize Default Plans
         initPlans();
 
-        // 3b. Initialize starter feature catalog (admin can add/edit/delete afterwards).
+        // 3b. Initialize Starter Feature Catalog
         initFeatureCatalog();
 
-        // 3c. Seed quota limits (plan_features) + rate limits for the seed plans (idempotent...
-        //     ON CONFLICT DO NOTHING for limits, only-if-null for rate limits - admin edits preserved).
+        // 3c. Seed Quotas & Rate Limits
         seedPlanQuotasAndRateLimits();
 
-        // 4. Backfill profile_completed for rows created before the column existed.
+        // 4. Backfill profile_completed for older accounts
         backfillProfileCompleted();
 
-        // 4b. Heal user_quota rows stuck at the old "never reset" sentinel (9999-12-31 / LocalDateTime.MAX),
-        //     which the sync logic can never expire on its own - they would display forever.
+        // 4b. Heal sentinel reset_at values for user quotas
         backfillQuotaResetAt();
 
-        // 4c. Seed tier_order + quota_period_days for 4 sample plans (Phase 1A/1C). Idempotent (only set when null).
-        backfillPlanTierAndPeriod();
+        // 4c. Recalculate tierOrder
+        try {
+            planService.renumberTierOrder();
+        } catch (Exception e) {
+            log.warn("renumberTierOrder lúc khởi động thất bại (sẽ tự chạy lại khi admin CRUD gói): {}", e.getMessage());
+        }
 
-        // 4d. Mark Free plan (fixed UUID) as base plan.
-        backfillBasePlan();
+        // 4e. Seed Test Upgrade User
+        seedUpgradeTestUser(userRole);
 
-        // 4e. Create test upgrade user (Standard plan, 15 days remaining).
-        seedUpgradeTestUser();
-
-        // 5. Workspace file tree: backfill sheets.diagram_type + one root DIAGRAM item per sheet.
+        // 5. Backfill Workspace Items tree
         backfillWorkspaceItems();
 
         log.info("Data initialization completed.");
     }
 
-    private void seedPlanQuotasAndRateLimits() {
-
-        // Rate limit (per 10s / per minute)
-        setRate("11111111-1111-1111-1111-111111111111", 3, 15);      // Free
-        setRate("22222222-2222-2222-2222-222222222222", 6, 30);      // Education
-        setRate("33333333-3333-3333-3333-333333333333", 8, 45);      // Standard
-        setRate("44444444-4444-4444-4444-444444444444", 12, 80);     // Pro
-//        setRate("55555555-5555-5555-5555-555555555555", null, null); // Enterprise
-
-        // AI, Projects, Diagrams, Export PDF, Collaborators
-        seedLimits("11111111-1111-1111-1111-111111111111", 50, 3, 15, 5, 1);
-
-        seedLimits("22222222-2222-2222-2222-222222222222", 400, 12, 30, 50, 4);
-
-        seedLimits("33333333-3333-3333-3333-333333333333", 600, 20, 60, 65, 6);
-
-        seedLimits("44444444-4444-4444-4444-444444444444", 1500, 30, 100, 100, 10);
-
-//        seedLimits("55555555-5555-5555-5555-555555555555", -1, -1, -1, -1, -1);
-
-        log.info("Plan quotas & rate limits seeded (idempotent).");
-    }
-
-    private void setRate(String planId, Integer per10s, Integer perMin) {
-        jdbcTemplate.update(
-                "UPDATE plans SET rate_limit_per_10s = ?, rate_limit_per_min = ? "
-                        + "WHERE id = ? AND rate_limit_per_10s IS NULL AND rate_limit_per_min IS NULL",
-                per10s, perMin, UUID.fromString(planId));
-    }
-
-    private void seedLimits(String planId, int ai, int projects, int diagrams, int exportPdf, int collaborators) {
-        seedFeature(planId, PlanFeatureKey.AI_QUERIES, ai);
-        seedFeature(planId, PlanFeatureKey.MAX_PROJECTS, projects);
-        seedFeature(planId, PlanFeatureKey.MAX_DIAGRAMS, diagrams);
-        seedFeature(planId, PlanFeatureKey.EXPORT_PDF, exportPdf);
-        seedFeature(planId, PlanFeatureKey.MAX_COLLABORATORS, collaborators);
-    }
-
-    private void seedFeature(String planId, PlanFeatureKey key, int value) {
-        jdbcTemplate.update(
-                "INSERT INTO plan_features (id, created_at, updated_at, plan_id, feature_key, limit_value) "
-                        + "VALUES (?, now(), now(), ?, ?, ?) ON CONFLICT (plan_id, feature_key) DO NOTHING",
-                UUID.randomUUID(), UUID.fromString(planId), key.name(), value);
-    }
-
+    // ==========================================
+    // 0. SHEDLOCK
+    // ==========================================
     private void initShedLockTable() {
-        jdbcTemplate.execute("CREATE TABLE IF NOT EXISTS shedlock (" +
-                "name VARCHAR(64) NOT NULL PRIMARY KEY, " +
-                "lock_until TIMESTAMP NOT NULL, " +
-                "locked_at TIMESTAMP NOT NULL, " +
-                "locked_by VARCHAR(255) NOT NULL)");
+        jdbcTemplate.execute("""
+            CREATE TABLE IF NOT EXISTS shedlock (
+                name VARCHAR(64) NOT NULL PRIMARY KEY,
+                lock_until TIMESTAMP NOT NULL,
+                locked_at TIMESTAMP NOT NULL,
+                locked_by VARCHAR(255) NOT NULL
+            )
+        """);
         log.info("ShedLock table ensured.");
     }
 
+    // ==========================================
+    // 1 & 2. ROLES & ADMIN USER
+    // ==========================================
+    private Role initRole(String roleName, String description) {
+        return roleRepository.findByRoleName(roleName)
+                .orElseGet(() -> {
+                    Role newRole = Role.builder()
+                            .roleName(roleName)
+                            .description(description)
+                            .build();
+                    log.info("Created role: {}", roleName);
+                    return roleRepository.save(newRole);
+                });
+    }
+
+    private void initAdminUser(Role adminRole) {
+        String adminEmail = "admin@gmail.com";
+        if (!userRepository.existsByEmail(adminEmail)) {
+            User adminUser = User.builder()
+                    .email(adminEmail)
+                    .username("admin")
+                    .password(passwordEncoder.encode("Admin123"))
+                    .fullName("System Administrator")
+                    .phone("0123456789")
+                    .status(UserStatus.ACTIVE)
+                    .profileCompleted(true)
+                    .role(adminRole)
+                    .build();
+            userRepository.save(adminUser);
+            log.info("Created sample admin user: {}", adminEmail);
+        }
+    }
+
+    // ==========================================
+    // 3. PLANS & CATALOG
+    // ==========================================
     private void initPlans() {
         if (planRepository.count() == 0) {
             log.info("Initializing default plans via SQL (VND, ACTIVE)...");
 
             String sql = """
                 INSERT INTO plans (
-                    id,
-                    created_at,
-                    updated_at,
-                    name,
-                    price,
-                    currency,
-                    status,
-                    description,
-                    duration_days,
-                    max_diagrams
+                    id, created_at, updated_at, name, price, currency, status,
+                    description, duration_days, max_diagrams, is_default_plan
                 )
-                VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, 'VND', 'ACTIVE', ?, ?, ?)
-                """;
+                VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, 'VND', 'ACTIVE', ?, ?, ?, ?)
+            """;
 
             // Free
-            jdbcTemplate.update(
-                    sql,
-                    UUID.fromString("11111111-1111-1111-1111-111111111111"),
-                    "Free",
-                    0,
-                    "For students and hobbyists.",
-                    -1,
-                    15);
-
+            jdbcTemplate.update(sql, PLAN_FREE_ID, "Free", 0, "For students and hobbyists.", -1, 15, true);
             // Education
-            jdbcTemplate.update(
-                    sql,
-                    UUID.fromString("22222222-2222-2222-2222-222222222222"),
-                    "Education",
-                    69000,
-                    "Student plan (requires student verification).",
-                    30,
-                    30);
-
+            jdbcTemplate.update(sql, PLAN_EDUCATION_ID, "Education", 29000, "Student plan (requires student verification).", 30, 30, false);
             // Standard
-            jdbcTemplate.update(
-                    sql,
-                    UUID.fromString("33333333-3333-3333-3333-333333333333"),
-                    "Standard",
-                    139000,
-                    "For individual users.",
-                    30,
-                    60);
-
+            jdbcTemplate.update(sql, PLAN_STANDARD_ID, "Standard", 49000, "For individual users.", 30, 60, false);
             // Pro
-            jdbcTemplate.update(
-                    sql,
-                    UUID.fromString("44444444-4444-4444-4444-444444444444"),
-                    "Pro",
-                    269000,
-                    "For developers, business analysts and professionals.",
-                    30,
-                    100);
+            jdbcTemplate.update(sql, PLAN_PRO_ID, "Pro", 99000, "For developers, business analysts and professionals.", 30, 100, false);
 
             log.info("Plans initialized successfully.");
         } else {
@@ -231,9 +188,9 @@ public class DataInitializer implements CommandLineRunner {
                 SET
                     price = CASE
                         WHEN id = '11111111-1111-1111-1111-111111111111' THEN 0
-                        WHEN id = '22222222-2222-2222-2222-222222222222' THEN 69000
-                        WHEN id = '33333333-3333-3333-3333-333333333333' THEN 139000
-                        WHEN id = '44444444-4444-4444-4444-444444444444' THEN 269000
+                        WHEN id = '22222222-2222-2222-2222-222222222222' THEN 29000
+                        WHEN id = '33333333-3333-3333-3333-333333333333' THEN 49000
+                        WHEN id = '44444444-4444-4444-4444-444444444444' THEN 99000
                         ELSE price
                     END,
                     max_diagrams = CASE
@@ -252,10 +209,19 @@ public class DataInitializer implements CommandLineRunner {
                     '44444444-4444-4444-4444-444444444444'
                 )
                 AND (currency IS NULL OR currency <> 'VND')
-                """;
+            """;
 
             jdbcTemplate.update(updateSql);
 
+            int defaulted = jdbcTemplate.update("""
+                UPDATE plans SET is_default_plan = true
+                WHERE id = '11111111-1111-1111-1111-111111111111'
+                AND NOT EXISTS (SELECT 1 FROM plans p WHERE p.is_default_plan = true)
+            """);
+
+            if (defaulted > 0) {
+                log.info("Marked Free plan as default plan (legacy DB).");
+            }
             log.info("Existing seed plans migrated.");
         }
     }
@@ -281,14 +247,70 @@ public class DataInitializer implements CommandLineRunner {
         log.info("Feature catalog seeded ({} features).", labels.length);
     }
 
+    // ==========================================
+    // 3c. SEED LIMITS & RATE LIMITS
+    // ==========================================
+    private void seedPlanQuotasAndRateLimits() {
+        // Rate limits (per 10s / per minute)
+        setRate(PLAN_FREE_ID, 3, 15);
+        setRate(PLAN_EDUCATION_ID, 6, 30);
+        setRate(PLAN_STANDARD_ID, 8, 45);
+        setRate(PLAN_PRO_ID, 12, 80);
+
+        // Feature Limits: AI, Projects, Diagrams, Export PDF, Collaborators
+        seedLimits(PLAN_FREE_ID, 50, 3, 15, 5, 1);
+        seedLimits(PLAN_EDUCATION_ID, 400, 12, 30, 50, 4);
+        seedLimits(PLAN_STANDARD_ID, 600, 20, 60, 65, 6);
+        seedLimits(PLAN_PRO_ID, 1500, 30, 100, 100, 10);
+
+        log.info("Plan quotas & rate limits seeded (idempotent).");
+    }
+
+    private void setRate(UUID planId, Integer per10s, Integer perMin) {
+        jdbcTemplate.update("""
+            UPDATE plans SET rate_limit_per_10s = ?, rate_limit_per_min = ?
+            WHERE id = ? AND rate_limit_per_10s IS NULL AND rate_limit_per_min IS NULL
+        """, per10s, perMin, planId);
+    }
+
+    private void seedLimits(UUID planId, int ai, int projects, int diagrams, int exportPdf, int collaborators) {
+        seedFeature(planId, PlanFeatureKey.AI_QUERIES, ai);
+        seedFeature(planId, PlanFeatureKey.MAX_PROJECTS, projects);
+        seedFeature(planId, PlanFeatureKey.MAX_DIAGRAMS, diagrams);
+        seedFeature(planId, PlanFeatureKey.EXPORT_PDF, exportPdf);
+        seedFeature(planId, PlanFeatureKey.MAX_COLLABORATORS, collaborators);
+    }
+
+    private void seedFeature(UUID planId, PlanFeatureKey key, int value) {
+        jdbcTemplate.update("""
+            INSERT INTO plan_features (id, created_at, updated_at, plan_id, feature_key, limit_value)
+            VALUES (?, now(), now(), ?, ?, ?)
+            ON CONFLICT (plan_id, feature_key) DO NOTHING
+        """, UUID.randomUUID(), planId, key.name(), value);
+    }
+
     /**
-     * One-time backfill: rows that predate the {@code profile_completed} column come back as null.
-     * Onboarding is a new feature, so no existing Google user has ever completed it - key on the
-     * provider, not the password (the password is unreliable: fresh Google users may carry a random
-     * BCrypt hash). A Google user becomes "completed" only once they have changed their own password
-     * (onboarding/OTP reset sets {@code lastPasswordChangeAt}); everyone else (normal register) is
-     * considered already complete.
+     * Truy vấn trực tiếp từ DB qua JdbcTemplate để tránh LazyInitializationException
+     * khi đối tượng Plan không nằm trong Session active.
      */
+    private int limitOf(Plan plan, PlanFeatureKey key) {
+        return limitOf(plan.getId(), key);
+    }
+
+    private int limitOf(UUID planId, PlanFeatureKey key) {
+        String sql = "SELECT limit_value FROM plan_features WHERE plan_id = ? AND feature_key = ?";
+        List<Integer> results = jdbcTemplate.query(
+                sql,
+                (rs, rowNum) -> rs.getInt("limit_value"),
+                planId,
+                key.name()
+        );
+        return results.isEmpty() ? 0 : results.get(0);
+    }
+
+    // ==========================================
+    // 4. BACKFILL & HEAL DATA
+    // ==========================================
     private void backfillProfileCompleted() {
         var pending = userRepository.findAll().stream()
                 .filter(u -> u.getProfileCompleted() == null)
@@ -304,69 +326,85 @@ public class DataInitializer implements CommandLineRunner {
         log.info("Backfilled profile_completed for {} existing user(s).", pending.size());
     }
 
-    /**
-     * Idempotent seed for Subscription Phase 1: assign {tier_order} (Free=0 thru Pro=3) and
-     * {quota_period_days=30} for 4 fixed-UUID sample plans. Only set when null - admin manual edits
-     * are preserved, leaving 0 untouched. Needed for upgrade/quota rough-estimate flow (Phase 1C).
-     */
-    private void backfillPlanTierAndPeriod() {
-        setTier("11111111-1111-1111-1111-111111111111", 0); // Free
-        setTier("22222222-2222-2222-2222-222222222222", 1); // Education
-        setTier("33333333-3333-3333-3333-333333333333", 2); // Standard
-        setTier("44444444-4444-4444-4444-444444444444", 3); // Pro
-        int period = jdbcTemplate.update(
-                "UPDATE plans SET quota_period_days = 30 WHERE quota_period_days IS NULL");
-        if (period > 0) {
-            log.info("Backfilled quota_period_days=30 for {} plan(s).", period);
-        }
-    }
-
-    private void setTier(String planId, int tier) {
-        jdbcTemplate.update(
-                "UPDATE plans SET tier_order = ? WHERE id = ? AND tier_order IS NULL",
-                tier, UUID.fromString(planId));
-    }
-
-    /** Đánh dấu gói Free là base plan (idempotent: chỉ set khi null). */
-    private void backfillBasePlan() {
-        int updated = jdbcTemplate.update(
-                "UPDATE plans SET is_base_plan = true WHERE id = ? AND is_base_plan IS NULL",
-                UUID.fromString("11111111-1111-1111-1111-111111111111"));
-        if (updated > 0) {
-            log.info("Marked Free plan as base plan.");
-        }
-    }
-
-    /**
-     * One-time, idempotent heal for {@code user_quota.reset_at} rows written by the old free/permanent-plan
-     * code, which used a far-future sentinel ({@code 9999-12-31} or {@link java.time.LocalDateTime#MAX}).
-     * Such rows never "expire" (their reset_at is always in the future), so {@code syncQuotaToCurrentPlan}
-     * can never re-snapshot them - they'd show up forever on the UI. Reset them to a real rolling period
-     * ({@code now + 30 days}); the service recomputes the exact value on the next quota access. Idempotent:
-     * once fixed, no row matches the far-future threshold, so reruns update 0 rows.
-     */
     private void backfillQuotaResetAt() {
-        int fixed = jdbcTemplate.update(
-                "UPDATE user_quota SET reset_at = now() + interval '30 days', updated_at = now() "
-                        + "WHERE reset_at >= TIMESTAMP '9000-01-01 00:00:00'");
+        int fixed = jdbcTemplate.update("""
+            UPDATE user_quota
+            SET reset_at = now() + interval '30 days', updated_at = now()
+            WHERE reset_at >= TIMESTAMP '9000-01-01 00:00:00'
+        """);
         if (fixed > 0) {
             log.info("Backfilled reset_at for {} user_quota row(s) stuck at the old never-reset sentinel.", fixed);
         }
     }
 
-    /**
-     * Idempotent backfill for the workspace file tree feature:
-     * (1) sheets created before the {@code diagram_type} column get it derived from their
-     *     diagramData JSON (fallback "activity" when absent/invalid);
-     * (2) every sheet without a workspace item gets exactly one root DIAGRAM item - the unique
-     *     index on {@code workspace_items.sheet_id} guarantees reruns never create duplicates.
-     *     Duplicate root names within a project are resolved with a deterministic suffix "(2)", "(3)"...
-     */
+    // ==========================================
+    // 4e. SEED TEST UPGRADE USER
+    // ==========================================
+    private void seedUpgradeTestUser(Role userRole) {
+        String email = "upgrader@test.com";
+
+        // 1. Tìm user nếu đã tồn tại, nếu chưa thì tạo mới
+        User user = userRepository.findByEmail(email).orElseGet(() -> {
+            User newUser = User.builder()
+                    .email(email)
+                    .username("upgrader")
+                    .password(passwordEncoder.encode("Upgrader123"))
+                    .fullName("Upgrade Test User")
+                    .status(UserStatus.ACTIVE)
+                    .profileCompleted(true)
+                    .role(userRole)
+                    .build();
+            return userRepository.save(newUser);
+        });
+
+        // 2. Nếu user ĐÃ CÓ subscription hợp lệ thì mới bỏ qua
+        if (user.getCurrentSubscription() != null) {
+            return;
+        }
+
+        log.info("User {} exists but missing subscription, repairing...", email);
+
+        Plan standardPlan = planRepository.findById(PLAN_STANDARD_ID)
+                .orElseThrow(() -> new RuntimeException("Standard plan not found"));
+
+        LocalDateTime now = LocalDateTime.now();
+        Subscription sub = Subscription.builder()
+                .user(user)
+                .plan(standardPlan)
+                .status(SubscriptionStatus.ACTIVE)
+                .startDate(now.minusDays(15))
+                .endDate(now.plusDays(15))
+                .billingPriceSnapshot(new BigDecimal("49000"))
+                .currencySnapshot("VND")
+                .billingCycleSnapshot("MONTHLY")
+                .nominalAiLimitSnapshot(600)
+                .snapshotPlanName(standardPlan.getName())
+                .snapshotPlanDescription(standardPlan.getDescription())
+                .snapshotAiQueries(600)
+                .snapshotMaxProjects(limitOf(standardPlan, PlanFeatureKey.MAX_PROJECTS))
+                .snapshotMaxDiagrams(limitOf(standardPlan, PlanFeatureKey.MAX_DIAGRAMS))
+                .snapshotMaxExportPdf(limitOf(standardPlan, PlanFeatureKey.EXPORT_PDF))
+                .snapshotMaxCollaborators(limitOf(standardPlan, PlanFeatureKey.MAX_COLLABORATORS))
+                .snapshotRateLimitPer10s(standardPlan.getRateLimitPer10s())
+                .snapshotRateLimitPerMin(standardPlan.getRateLimitPerMin())
+                .build();
+        sub = subscriptionRepository.save(sub);
+
+        // 3. Link ngược lại vào User
+        user.setCurrentSubscription(sub);
+        userRepository.save(user);
+
+        log.info("Successfully assigned Standard plan to user: {} (15d remaining)", email);
+    }
+
+    // ==========================================
+    // 5. WORKSPACE ITEMS
+    // ==========================================
     private void backfillWorkspaceItems() {
         List<Sheet> sheets = sheetRepository.findAll();
         if (sheets.isEmpty()) return;
 
-        // (1) diagram_type
+        // (1) Backfill diagram_type
         List<Sheet> typeChanged = new ArrayList<>();
         for (Sheet sheet : sheets) {
             if (sheet.getDiagramType() == null) {
@@ -379,7 +417,7 @@ public class DataInitializer implements CommandLineRunner {
             log.info("Backfilled diagram_type for {} sheet(s).", typeChanged.size());
         }
 
-        // (2) root DIAGRAM item per sheet - track root names/counts per project for dedupe/orderIndex
+        // (2) Root DIAGRAM item per sheet
         Map<UUID, Set<String>> rootNamesByProject = new HashMap<>();
         Map<UUID, Integer> rootCountByProject = new HashMap<>();
         for (WorkspaceItem item : workspaceItemRepository.findAll()) {
@@ -420,77 +458,6 @@ public class DataInitializer implements CommandLineRunner {
             return (type == null || type.isBlank()) ? "activity" : type;
         } catch (Exception e) {
             return "activity";
-        }
-    }
-
-    private void seedUpgradeTestUser() {
-        String email = "upgrader@test.com";
-        if (userRepository.existsByEmail(email)) return;
-
-        Role userRole = roleRepository.findByRoleName("USER")
-                .orElseThrow(() -> new RuntimeException("USER role not found"));
-        Plan standardPlan = planRepository.findById(
-                        UUID.fromString("33333333-3333-3333-3333-333333333333"))
-                .orElseThrow(() -> new RuntimeException("Standard plan not found"));
-
-        User user = User.builder()
-                .email(email)
-                .username("upgrader")
-                .password(passwordEncoder.encode("Upgrader123"))
-                .fullName("Upgrade Test User")
-                .status(UserStatus.ACTIVE)
-                .profileCompleted(true)
-                .role(userRole)
-                .build();
-        user = userRepository.save(user);
-
-        LocalDateTime now = LocalDateTime.now();
-        Subscription sub = Subscription.builder()
-                .user(user)
-                .plan(standardPlan)
-                .status(SubscriptionStatus.ACTIVE)
-                .startDate(now.minusDays(15))
-                .endDate(now.plusDays(15))
-                .billingPriceSnapshot(new java.math.BigDecimal("139000"))
-                .currencySnapshot("VND")
-                .billingCycleSnapshot("MONTHLY")
-                .nominalAiLimitSnapshot(600)
-                .build();
-        sub = subscriptionRepository.save(sub);
-
-        user.setCurrentSubscription(sub);
-        userRepository.save(user);
-
-        log.info("Created upgrade test user: {} / Upgrader123 (Standard plan, 15d remaining)", email);
-    }
-
-    private Role initRole(String roleName, String description) {
-        return roleRepository.findByRoleName(roleName)
-                .orElseGet(() -> {
-                    Role newRole = Role.builder()
-                            .roleName(roleName)
-                            .description(description)
-                            .build();
-                    log.info("Created role: {}", roleName);
-                    return roleRepository.save(newRole);
-                });
-    }
-
-    private void initAdminUser(Role adminRole) {
-        String adminEmail = "admin@gmail.com";
-        if (!userRepository.existsByEmail(adminEmail)) {
-            User adminUser = User.builder()
-                    .email(adminEmail)
-                    .username("admin")
-                    .password(passwordEncoder.encode("Admin123"))
-                    .fullName("System Administrator")
-                    .phone("0123456789")
-                    .status(UserStatus.ACTIVE)
-                    .profileCompleted(true)
-                    .role(adminRole)
-                    .build();
-            userRepository.save(adminUser);
-            log.info("Created sample admin user: {}", adminEmail);
         }
     }
 }

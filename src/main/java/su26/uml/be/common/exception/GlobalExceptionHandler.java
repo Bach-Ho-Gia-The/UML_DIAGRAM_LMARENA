@@ -2,6 +2,7 @@ package su26.uml.be.common.exception;
 
 import jakarta.validation.ConstraintViolation;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -124,5 +125,42 @@ public class GlobalExceptionHandler {
         String minValue = String.valueOf(attributes.get(MIN_ATTRIBUTE));
 
         return message.replace("{" + MIN_ATTRIBUTE + "}", minValue);
+    }
+
+    /**
+     * T26: vi phạm ràng buộc DB (unique, not null, check...). Map các constraint đã biết sang
+     * ErrorCode tương ứng; còn lại trả 400 kèm log đầy đủ để còn debug — KHÔNG để lọt thành 500.
+     *
+     * <p>Sau refactor co base-plan -> isDefaultPlan (bỏ unique ở DB) và price nullable, các nhánh map
+     * cũ cho {@code plans_is_base_plan} / {@code plans_tier_order} đã bị xoá (không còn constraint).
+     */
+    @ExceptionHandler(value = DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse> handlingDataIntegrityViolation(DataIntegrityViolationException exception) {
+        String message = exception.getMostSpecificCause() != null
+                ? exception.getMostSpecificCause().getMessage()
+                : exception.getMessage();
+        String lower = message != null ? message.toLowerCase() : "";
+
+        ErrorCode errorCode = null;
+        if (lower.contains("plans_name")) {
+            errorCode = ErrorCode.PLAN_NAME_EXISTED;
+        }
+
+        if (errorCode != null) {
+            return ResponseEntity.status(errorCode.getStatusCode()).body(
+                    ApiResponse.builder()
+                            .code(errorCode.getCode())
+                            .message(errorCode.getMessage())
+                            .build()
+            );
+        }
+
+        log.error("Data integrity violation (unmapped constraint): {}", message, exception);
+        return ResponseEntity.badRequest().body(
+                ApiResponse.builder()
+                        .code(ErrorCode.INVALID_KEY.getCode())
+                        .message("Dữ liệu vi phạm ràng buộc hệ thống. Vui lòng kiểm tra lại.")
+                        .build()
+        );
     }
 }

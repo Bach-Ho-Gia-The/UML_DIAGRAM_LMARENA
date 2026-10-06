@@ -16,8 +16,6 @@ import su26.uml.be.features.user.dto.*;
 import su26.uml.be.features.admin.dto.AdminSetPasswordRequest;
 import su26.uml.be.features.admin.dto.AdminUpdateUserRequest;
 import su26.uml.be.common.constant.enums.UserStatus;
-import su26.uml.be.common.constant.enums.SubscriptionStatus;
-import su26.uml.be.common.constant.enums.PlanStatus;
 import su26.uml.be.common.response.ApiResponse;
 import su26.uml.be.features.user.dto.DeleteAccountResponse;
 import su26.uml.be.features.user.dto.MeResponse;
@@ -25,9 +23,7 @@ import su26.uml.be.common.response.PagedResponse;
 import su26.uml.be.features.user.dto.UserResponse;
 
 import java.time.LocalDateTime;
-import su26.uml.be.features.plan.entity.Plan;
 import su26.uml.be.features.user.entity.Role;
-import su26.uml.be.features.subscription.entity.Subscription;
 import su26.uml.be.features.user.entity.User;
 import su26.uml.be.common.exception.AppException;
 import su26.uml.be.common.exception.ErrorCode;
@@ -35,8 +31,6 @@ import su26.uml.be.features.user.mapper.UserMapper;
 import su26.uml.be.features.project.repository.ProjectRepository;
 import su26.uml.be.features.user.repository.RoleRepository;
 import su26.uml.be.features.project.repository.SheetRepository;
-import su26.uml.be.features.plan.repository.PlanRepository;
-import su26.uml.be.features.subscription.repository.SubscriptionRepository;
 import su26.uml.be.features.user.repository.UserRepository;
 import org.springframework.web.multipart.MultipartFile;
 import su26.uml.be.features.file.dto.FileUploadResponse;
@@ -44,6 +38,7 @@ import su26.uml.be.infrastructure.email.EmailService;
 import su26.uml.be.features.user.service.OtpService;
 import su26.uml.be.features.auth.service.RefreshTokenService;
 import su26.uml.be.infrastructure.storage.StorageService;
+import su26.uml.be.features.plan.service.PlanResolutionService;
 import su26.uml.be.features.user.service.UserService;
 
 
@@ -58,9 +53,8 @@ import java.util.List;
 @Transactional
 public class UserServiceImpl implements UserService {
     UserRepository userRepository;
+    PlanResolutionService planResolutionService;
     RoleRepository roleRepository;
-    PlanRepository planRepository;
-    SubscriptionRepository subscriptionRepository;
     ProjectRepository projectRepository;
     SheetRepository sheetRepository;
 
@@ -91,7 +85,8 @@ public class UserServiceImpl implements UserService {
         user.setStatus(UserStatus.ACTIVE);
         user.setProfileCompleted(true); // tài khoản đăng ký thường đã có đủ thông tin
         User savedUser = userRepository.save(user);
-        assignLowestPlan(savedUser);
+        // D9: user mới KHÔNG tạo Subscription — entitlements resolve qua PlanResolutionService
+        // (gói mặc định isDefaultPlan). Xoá assignLowestPlan cũ (tạo sub ảo cho user free).
 
         UserResponse userResponse = userMapper.toUserResponse(savedUser);
 //        resolveAvatar(userResponse);
@@ -256,23 +251,11 @@ public class UserServiceImpl implements UserService {
 
         MeResponse meResponse = userMapper.toMeResponse(user);
 
-        // Gói hiệu lực để FE vẽ tag (paid sub → gói đó; không có → base). currentPlanId giữ nguyên (null cho free).
-        Plan effective = resolveEffectivePlan(user.getId(), LocalDateTime.now());
-        if (effective != null) {
-            userMapper.applyEffectivePlan(effective, meResponse);
-        }
+        // Gói hiệu lực để FE vẽ tag (paid sub -> gói đó; không có -> gói mặc định isDefaultPlan).
+        // D9: mọi nơi cần "gói hiện lực" đều gọi chung PlanResolutionService.
+        planResolutionService.resolveEffectivePlanFor(user)
+                .ifPresent(plan -> userMapper.applyEffectivePlan(plan, meResponse));
         return ApiResponse.success("Lấy thông tin người dùng hiện tại thành công", meResponse);
-    }
-
-    /** Gói hiệu lực: paid sub ACTIVE (chưa hết hạn) → gói đó; nếu không → gói base (isBasePlan), fallback giá thấp nhất. */
-    private Plan resolveEffectivePlan(UUID userId, LocalDateTime now) {
-        return subscriptionRepository
-                .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, now)
-                .map(Subscription::getPlan)
-                .orElseGet(() -> planRepository
-                        .findFirstByIsBasePlanTrueAndStatus(PlanStatus.ACTIVE)
-                        .or(() -> planRepository.findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE))
-                        .orElse(null));
     }
 
     @Override
@@ -411,7 +394,7 @@ public class UserServiceImpl implements UserService {
         user.setStatus(UserStatus.ACTIVE);
         user.setProfileCompleted(true);
         User savedUser = userRepository.save(user);
-        assignLowestPlan(savedUser);
+        // D9: admin tạo user cũng không tạo subscription — resolve gói qua PlanResolutionService.
 
         // Audit: id/email của admin vừa tạo (target chỉ có sau khi save).
         AuditContext.setTargetId(savedUser.getId());
@@ -608,34 +591,5 @@ public class UserServiceImpl implements UserService {
     private String generateOtp() {
         int otp = 100000 + SECURE_RANDOM.nextInt(900000);
         return String.valueOf(otp);
-    }
-
-    private void assignLowestPlan(User user) {
-        planRepository.findFirstByIsBasePlanTrueAndStatus(PlanStatus.ACTIVE)
-                .or(() -> planRepository.findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE))
-                .ifPresentOrElse(plan -> {
-                    boolean isBase = Boolean.TRUE.equals(plan.getIsBasePlan())
-                            || (plan.getTierOrder() != null && plan.getTierOrder() == 0)
-                            || plan.getPrice().signum() == 0;
-                    if (isBase) {
-                        user.setCurrentSubscription(null);
-                    } else {
-                        LocalDateTime now = LocalDateTime.now();
-                        LocalDateTime endDate = plan.getDurationDays() != null && plan.getDurationDays() > 0
-                                ? now.plusDays(plan.getDurationDays())
-                                : null;
-
-                        Subscription subscription = Subscription.builder()
-                                .user(user)
-                                .plan(plan)
-                                .status(SubscriptionStatus.ACTIVE)
-                                .startDate(now)
-                                .endDate(endDate)
-                                .build();
-
-                        subscriptionRepository.save(subscription);
-                        user.setCurrentSubscription(subscription);
-                    }
-                }, () -> log.warn("Không tìm thấy gói ACTIVE nào — user {} không được gán subscription", user.getEmail()));
     }
 }

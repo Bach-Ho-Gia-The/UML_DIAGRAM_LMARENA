@@ -2,6 +2,7 @@ package su26.uml.be.features.plan.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 import su26.uml.be.features.plan.entity.Plan;
 import su26.uml.be.common.constant.enums.PlanStatus;
@@ -16,21 +17,36 @@ public interface PlanRepository extends JpaRepository<Plan, UUID> {
 
     boolean existsByNameIgnoreCase(String name);
 
-    /** Giá gói phải unique (không cho 2 gói cùng giá) — nền cho auto tierOrder theo giá. */
-    boolean existsByPrice(java.math.BigDecimal price);
-    boolean existsByPriceAndIdNot(java.math.BigDecimal price, UUID id);
+    /**
+     * Thứ tự xếp tier (D4 — một nguồn duy nhất): gói mặc định (isDefaultPlan=true) đứng đầu,
+     * gói báo giá (contactSales=true) đứng cuối, giá tăng dần (NULLS LAST), cùng giá thì ai tạo
+     * trước đứng trước. Kết quả: Free=0, Education=1, Standard=2, Pro=3, Enterprise=4.
+     */
+    @Query("SELECT p FROM Plan p WHERE p.status = :status ORDER BY "
+            + "CASE WHEN p.isDefaultPlan = TRUE THEN 0 ELSE 1 END, "
+            + "CASE WHEN p.contactSales = TRUE THEN 1 ELSE 0 END, "
+            + "p.price ASC NULLS LAST, "
+            + "p.createdAt ASC")
+    List<Plan> findAllOrderedByTier(@Param("status") PlanStatus status);
 
-    /** Gói mặc định cho user chưa có subscription = gói ACTIVE giá thấp nhất. */
+    /** Gói mặc định đang ACTIVE — nguồn entitlements cho user chưa có subscription. */
+    Optional<Plan> findFirstByStatusAndIsDefaultPlanTrue(PlanStatus status);
+
+    /**
+     * @deprecated Không còn call-site — logic "gói rẻ nhất" được thay bằng cờ isDefaultPlan (D4/D5).
+     * Giữ lại chỉ để tương thích; dùng {@link #findFirstByStatusAndIsDefaultPlanTrue(PlanStatus)}.
+     */
+    @Deprecated
     Optional<Plan> findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus status);
 
-    /** Gói base = gói được đánh dấu isBasePlan = true và đang ACTIVE. */
-    Optional<Plan> findFirstByIsBasePlanTrueAndStatus(PlanStatus status);
+    /** Có gói mặc định ACTIVE nào không (dùng khi CREATE). */
+    boolean existsByStatusAndIsDefaultPlanTrue(PlanStatus status);
 
-    /** Kiểm tra unique isBasePlan (chỉ 1 gói base duy nhất). */
-    Optional<Plan> findByIsBasePlanTrue();
+    /** Có gói mặc định ACTIVE KHÁC gói đang sửa không (dùng khi UPDATE — tránh lỗi id <> NULL). */
+    boolean existsByStatusAndIsDefaultPlanTrueAndIdNot(PlanStatus status, UUID id);
 
-    /** Kiểm tra unique tierOrder. */
-    boolean existsByTierOrder(Integer tierOrder);
+    /** Đếm gói mặc định ACTIVE KHÁC gói đang sửa — phân biệt "đã có default" với "default cuối cùng". */
+    long countByStatusAndIsDefaultPlanTrueAndIdNot(PlanStatus status, UUID id);
 
     /** Ngưỡng rate-limit cao nhất (cho admin / user chưa có gói). */
     @Query("SELECT MAX(p.rateLimitPer10s) FROM Plan p")

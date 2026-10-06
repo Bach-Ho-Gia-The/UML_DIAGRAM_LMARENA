@@ -14,6 +14,7 @@ import su26.uml.be.features.subscription.dto.QuotaSnapshot;
 import su26.uml.be.features.subscription.dto.SubscriptionSnapshot;
 import su26.uml.be.features.subscription.dto.UpgradeQuoteResponse;
 import su26.uml.be.features.plan.entity.Plan;
+import su26.uml.be.common.constant.enums.PlanStatus;
 import su26.uml.be.features.plan.entity.PlanFeature;
 import su26.uml.be.features.subscription.entity.Subscription;
 import su26.uml.be.common.constant.enums.PlanFeatureKey;
@@ -21,6 +22,7 @@ import su26.uml.be.common.constant.enums.UpgradeMode;
 import su26.uml.be.common.exception.AppException;
 import su26.uml.be.common.exception.ErrorCode;
 import su26.uml.be.features.plan.repository.PlanRepository;
+import su26.uml.be.features.plan.service.PlanResolutionService;
 import su26.uml.be.features.user.repository.UserRepository;
 import su26.uml.be.features.usage.service.QuotaPeriodService;
 import su26.uml.be.features.subscription.service.SubscriptionAccessService;
@@ -38,6 +40,7 @@ public class UpgradeQuoteServiceImpl implements UpgradeQuoteService {
 
     UserRepository userRepository;
     PlanRepository planRepository;
+    PlanResolutionService planResolutionService;
     SubscriptionAccessService subscriptionAccessService;
     QuotaPeriodService quotaPeriodService;
     UpgradeCalculator upgradeCalculator;
@@ -68,10 +71,9 @@ public class UpgradeQuoteServiceImpl implements UpgradeQuoteService {
         UUID userId = resolveUserId(email);
         LocalDateTime now = LocalDateTime.now();
 
-        Subscription current = requireActiveSubscription(userId, now);
         Plan targetPlan = requirePlan(targetPlanId);
 
-        SubscriptionSnapshot currentSnap = buildSubscriptionSnapshot(current);
+        SubscriptionSnapshot currentSnap = buildCurrentSnapshot(userId, now);
         PlanSnapshot targetSnap = buildPlanSnapshot(targetPlan);
         QuotaSnapshot quotaSnap = quotaPeriodService.getCurrentSnapshot(userId);
 
@@ -84,10 +86,9 @@ public class UpgradeQuoteServiceImpl implements UpgradeQuoteService {
         UUID userId = resolveUserId(email);
         LocalDateTime now = LocalDateTime.now();
 
-        Subscription current = requireActiveSubscription(userId, now);
         Plan targetPlan = requirePlan(targetPlanId);
 
-        SubscriptionSnapshot currentSnap = buildSubscriptionSnapshot(current);
+        SubscriptionSnapshot currentSnap = buildCurrentSnapshot(userId, now);
         PlanSnapshot targetSnap = buildPlanSnapshot(targetPlan);
 
         int periodDays = periodDaysOf(targetPlan);
@@ -102,14 +103,38 @@ public class UpgradeQuoteServiceImpl implements UpgradeQuoteService {
                 .getId();
     }
 
-    private Subscription requireActiveSubscription(UUID userId, LocalDateTime now) {
+    /**
+     * T18: snapshot gói hiện lực — user CHƯA có subscription vẫn lấy được báo giá nâng cấp
+     * (dùng gói mặc định isDefaultPlan làm "current"). Trước đây ném UPGRADE_REQUIRES_ACTIVE_SUBSCRIPTION
+     * nên user free không xem/đấu nối được flow nâng gấp.
+     */
+    private SubscriptionSnapshot buildCurrentSnapshot(UUID userId, LocalDateTime now) {
         return subscriptionAccessService.getActiveSubscription(userId, now)
-                .orElseThrow(() -> new AppException(ErrorCode.UPGRADE_REQUIRES_ACTIVE_SUBSCRIPTION));
+                .map(this::buildSubscriptionSnapshot)
+                .orElseGet(() -> {
+                    Plan defaultPlan = planResolutionService.requireDefaultPlan();
+                    int periodDays = periodDaysOf(defaultPlan);
+                    return SubscriptionSnapshot.builder()
+                            .tierOrder(defaultPlan.getTierOrder())
+                            .price(defaultPlan.getPrice())
+                            .currency(defaultPlan.getCurrency())
+                            .nominalAiLimit(aiLimitOf(defaultPlan))
+                            .contactSales(defaultPlan.isContactSales())
+                            .periodStart(now)
+                            .periodEnd(now.plusDays(periodDays))
+                            .billingTotalDays(periodDays)
+                            .build();
+                });
     }
 
     private Plan requirePlan(UUID planId) {
-        return planRepository.findById(planId)
+        Plan plan = planRepository.findById(planId)
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_NOT_FOUND));
+        if (plan.getStatus() != PlanStatus.ACTIVE) {
+            // Không cho quote/nâng/hạ lên gói DRAFT/ARCHIVED.
+            throw new AppException(ErrorCode.PLAN_NOT_ACTIVE);
+        }
+        return plan;
     }
 
     private SubscriptionSnapshot buildSubscriptionSnapshot(Subscription current) {
@@ -120,6 +145,7 @@ public class UpgradeQuoteServiceImpl implements UpgradeQuoteService {
                 .currency(current.getCurrencySnapshot() != null ? current.getCurrencySnapshot() : currentPlan.getCurrency())
                 .nominalAiLimit(current.getNominalAiLimitSnapshot() != null
                         ? current.getNominalAiLimitSnapshot() : aiLimitOf(currentPlan))
+                .contactSales(currentPlan.isContactSales())
                 .periodStart(current.getStartDate())
                 .periodEnd(current.getEndDate())
                 .billingTotalDays(periodDaysOf(currentPlan))
@@ -133,6 +159,7 @@ public class UpgradeQuoteServiceImpl implements UpgradeQuoteService {
                 .price(targetPlan.getPrice())
                 .currency(targetPlan.getCurrency())
                 .nominalAiLimit(aiLimitOf(targetPlan))
+                .contactSales(targetPlan.isContactSales())
                 .build();
     }
 

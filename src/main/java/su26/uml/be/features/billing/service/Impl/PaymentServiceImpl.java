@@ -11,6 +11,7 @@ import su26.uml.be.features.plan.entity.Plan;
 import su26.uml.be.features.subscription.entity.Subscription;
 import su26.uml.be.features.user.entity.User;
 import su26.uml.be.common.constant.enums.PaymentStatus;
+import su26.uml.be.common.constant.enums.PlanStatus;
 import su26.uml.be.common.constant.enums.SubscriptionStatus;
 import su26.uml.be.common.exception.AppException;
 import su26.uml.be.common.exception.ErrorCode;
@@ -59,6 +60,16 @@ public class PaymentServiceImpl implements PaymentService {
     public PaymentResponse createPaymentLink(User user, UUID planId, String returnUrl, String cancelUrl) {
         Plan plan = planRepository.findById(planId)
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_NOT_FOUND));
+
+        // T14 (V3): gói báo giá có price = null — PHẢI chặn TRƯỚC khi đụng getPrice(),
+        // nếu không .amount(null) sẽ NPE và PayOS không nhận được số tiền hợp lệ.
+        if (plan.isContactSales()) {
+            throw new AppException(ErrorCode.PLAN_CONTACT_SALES_REQUIRED);
+        }
+        if (plan.getStatus() != PlanStatus.ACTIVE) {
+            // Không bán gói DRAFT/ARCHIVED.
+            throw new AppException(ErrorCode.PLAN_NOT_ACTIVE);
+        }
 
         String randomSuffix = String.format("%02d", new java.util.Random().nextInt(100));
         long epochSeconds = System.currentTimeMillis() / 1000;

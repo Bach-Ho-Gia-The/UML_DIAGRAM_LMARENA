@@ -6,20 +6,13 @@ import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import su26.uml.be.features.plan.entity.Plan;
-import su26.uml.be.features.plan.entity.PlanFeature;
-import su26.uml.be.features.subscription.entity.Subscription;
 import su26.uml.be.common.constant.enums.PlanFeatureKey;
-import su26.uml.be.common.constant.enums.PlanStatus;
-import su26.uml.be.common.constant.enums.SubscriptionStatus;
 import su26.uml.be.common.exception.AppException;
 import su26.uml.be.common.exception.ErrorCode;
-import su26.uml.be.features.plan.repository.PlanRepository;
-import su26.uml.be.features.subscription.repository.SubscriptionRepository;
 import su26.uml.be.features.user.repository.UserRepository;
 import su26.uml.be.features.plan.service.PlanLimitService;
+import su26.uml.be.features.plan.service.PlanResolutionService;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
@@ -28,8 +21,7 @@ import java.util.UUID;
 @Slf4j
 public class PlanLimitServiceImpl implements PlanLimitService {
 
-    SubscriptionRepository subscriptionRepository;
-    PlanRepository planRepository;
+    PlanResolutionService planResolutionService;
     UserRepository userRepository;
 
     @Override
@@ -38,7 +30,7 @@ public class PlanLimitServiceImpl implements PlanLimitService {
         if (isAdmin(userId)) {
             return; // Admin: không gắn gói, capacity luôn unlimited.
         }
-        int limit = limitOf(currentPlan(userId), key);
+        int limit = limitOf(planResolutionService.resolveEntitlements(userId), key);
         if (limit == -1) {
             return; // unlimited
         }
@@ -55,26 +47,21 @@ public class PlanLimitServiceImpl implements PlanLimitService {
                 .orElse(false);
     }
 
-    /** Gói hiện tại: subscription ACTIVE (chưa hết hạn) → gói; nếu không có → gói ACTIVE giá thấp nhất. */
-    private Plan currentPlan(UUID userId) {
-        return subscriptionRepository
-                .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, LocalDateTime.now())
-                .map(Subscription::getPlan)
-                .orElseGet(() -> planRepository
-                        .findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE)
-                        .orElse(null));
-    }
-
-    /** Giá trị limit của key; null (chưa đặt) / không có gói → 0 (chặn). -1 = unlimited. */
-    private int limitOf(Plan plan, PlanFeatureKey key) {
-        if (plan == null) {
+    /**
+     * Giá trị limit của key trong entitlement HIỆU LỰC (snapshot của sub nếu có, ngược lại live
+     * plan). null (chưa đặt) / không có gói → 0 (chặn). -1 = unlimited.
+     */
+    private int limitOf(PlanResolutionService.Entitlements e, PlanFeatureKey key) {
+        if (e == null) {
             return 0;
         }
-        return plan.getPlanFeatures().stream()
-                .filter(f -> f.getFeatureKey() == key)
-                .map(PlanFeature::getLimitValue)
-                .filter(v -> v != null)
-                .findFirst()
-                .orElse(0);
+        Integer v = switch (key) {
+            case MAX_PROJECTS -> e.maxProjects();
+            case MAX_DIAGRAMS -> e.maxDiagrams();
+            case AI_QUERIES -> e.aiQueries();
+            case EXPORT_PDF -> e.maxExportPdf();
+            case MAX_COLLABORATORS -> e.maxCollaborators();
+        };
+        return v != null ? v : 0;
     }
 }
