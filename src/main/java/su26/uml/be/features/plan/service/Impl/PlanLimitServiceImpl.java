@@ -6,8 +6,6 @@ import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import su26.uml.be.features.plan.entity.Plan;
-import su26.uml.be.features.plan.entity.PlanFeature;
 import su26.uml.be.common.constant.enums.PlanFeatureKey;
 import su26.uml.be.common.exception.AppException;
 import su26.uml.be.common.exception.ErrorCode;
@@ -32,7 +30,7 @@ public class PlanLimitServiceImpl implements PlanLimitService {
         if (isAdmin(userId)) {
             return; // Admin: không gắn gói, capacity luôn unlimited.
         }
-        int limit = limitOf(currentPlan(userId), key);
+        int limit = limitOf(planResolutionService.resolveEntitlements(userId), key);
         if (limit == -1) {
             return; // unlimited
         }
@@ -49,21 +47,21 @@ public class PlanLimitServiceImpl implements PlanLimitService {
                 .orElse(false);
     }
 
-    /** Gói hiện tại — nguồn duy nhất: PlanResolutionService (paid sub -> gói; không có -> gói mặc định isDefaultPlan). */
-    private Plan currentPlan(UUID userId) {
-        return planResolutionService.resolveEffectivePlan(userId).orElse(null);
-    }
-
-    /** Giá trị limit của key; null (chưa đặt) / không có gói → 0 (chặn). -1 = unlimited. */
-    private int limitOf(Plan plan, PlanFeatureKey key) {
-        if (plan == null) {
+    /**
+     * Giá trị limit của key trong entitlement HIỆU LỰC (snapshot của sub nếu có, ngược lại live
+     * plan). null (chưa đặt) / không có gói → 0 (chặn). -1 = unlimited.
+     */
+    private int limitOf(PlanResolutionService.Entitlements e, PlanFeatureKey key) {
+        if (e == null) {
             return 0;
         }
-        return plan.getPlanFeatures().stream()
-                .filter(f -> f.getFeatureKey() == key)
-                .map(PlanFeature::getLimitValue)
-                .filter(v -> v != null)
-                .findFirst()
-                .orElse(0);
+        Integer v = switch (key) {
+            case MAX_PROJECTS -> e.maxProjects();
+            case MAX_DIAGRAMS -> e.maxDiagrams();
+            case AI_QUERIES -> e.aiQueries();
+            case EXPORT_PDF -> e.maxExportPdf();
+            case MAX_COLLABORATORS -> e.maxCollaborators();
+        };
+        return v != null ? v : 0;
     }
 }

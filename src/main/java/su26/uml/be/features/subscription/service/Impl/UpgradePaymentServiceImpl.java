@@ -10,6 +10,7 @@ import su26.uml.be.features.billing.dto.PaymentResponse;
 import su26.uml.be.features.subscription.dto.UpgradeQuoteResponse;
 import su26.uml.be.features.billing.entity.PaymentTransaction;
 import su26.uml.be.features.plan.entity.Plan;
+import su26.uml.be.common.constant.enums.PlanStatus;
 import su26.uml.be.features.subscription.entity.Subscription;
 import su26.uml.be.features.user.entity.User;
 import su26.uml.be.common.constant.enums.PaymentStatus;
@@ -56,6 +57,10 @@ public class UpgradePaymentServiceImpl implements UpgradePaymentService {
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_NOT_FOUND));
         if (target.getTierOrder() == null) {
             throw new AppException(ErrorCode.PLAN_TIER_NOT_CONFIGURED);
+        }
+        if (target.getStatus() != PlanStatus.ACTIVE) {
+            // Không bán gói DRAFT/ARCHIVED — kể cả khi trước đó đã có người mua.
+            throw new AppException(ErrorCode.PLAN_NOT_ACTIVE);
         }
         // T17 (V3): gói báo giá có price = null — amount của PayOS sẽ null → chặn trước.
         if (target.isContactSales()) {

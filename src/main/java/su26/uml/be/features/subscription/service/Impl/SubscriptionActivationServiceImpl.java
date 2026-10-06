@@ -87,6 +87,7 @@ public class SubscriptionActivationServiceImpl implements SubscriptionActivation
                 .billingCycleSnapshot("MONTHLY")
                 .nominalAiLimitSnapshot(aiLimitOf(plan))
                 .build();
+        applyEntitlementSnapshot(sub, plan); // đóng băng quyền lợi lúc mua
         subscriptionRepository.save(sub);
 
         user.setCurrentSubscription(sub);
@@ -130,6 +131,7 @@ public class SubscriptionActivationServiceImpl implements SubscriptionActivation
                 .billingCycleSnapshot("MONTHLY")
                 .nominalAiLimitSnapshot(aiLimitOf(target))
                 .build();
+        applyEntitlementSnapshot(sub, target); // đóng băng quyền lợi gói mới
         subscriptionRepository.save(sub);
 
         user.setCurrentSubscription(sub);
@@ -153,14 +155,38 @@ public class SubscriptionActivationServiceImpl implements SubscriptionActivation
     }
 
     private int aiLimitOf(Plan plan) {
+        return limitOf(plan, PlanFeatureKey.AI_QUERIES);
+    }
+
+    private int limitOf(Plan plan, PlanFeatureKey key) {
         if (plan == null) {
             return 0;
         }
         return plan.getPlanFeatures().stream()
-                .filter(f -> f.getFeatureKey() == PlanFeatureKey.AI_QUERIES)
+                .filter(f -> f.getFeatureKey() == key)
                 .map(PlanFeature::getLimitValue)
                 .filter(v -> v != null)
                 .findFirst()
                 .orElse(0);
+    }
+
+    /**
+     * Đóng băng quyền lợi của gói vào subscription (snapshot). Sau bước này, admin sửa metadata
+     * gói (kể cả khi gói đang ACTIVE/ARCHIVED) không làm thay đổi quota/limits/rate-limit mà
+     * user đang được hưởng cho tới hết kỳ. Renew sau hết kỳ sẽ snapshot lại theo metadata mới.
+     */
+    private void applyEntitlementSnapshot(Subscription sub, Plan plan) {
+        if (plan == null) {
+            return;
+        }
+        sub.setSnapshotPlanName(plan.getName());
+        sub.setSnapshotPlanDescription(plan.getDescription());
+        sub.setSnapshotAiQueries(limitOf(plan, PlanFeatureKey.AI_QUERIES));
+        sub.setSnapshotMaxProjects(limitOf(plan, PlanFeatureKey.MAX_PROJECTS));
+        sub.setSnapshotMaxDiagrams(limitOf(plan, PlanFeatureKey.MAX_DIAGRAMS));
+        sub.setSnapshotMaxExportPdf(limitOf(plan, PlanFeatureKey.EXPORT_PDF));
+        sub.setSnapshotMaxCollaborators(limitOf(plan, PlanFeatureKey.MAX_COLLABORATORS));
+        sub.setSnapshotRateLimitPer10s(plan.getRateLimitPer10s());
+        sub.setSnapshotRateLimitPerMin(plan.getRateLimitPerMin());
     }
 }

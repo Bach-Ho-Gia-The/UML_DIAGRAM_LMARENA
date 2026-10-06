@@ -8,7 +8,6 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.experimental.FieldDefaults;
-import su26.uml.be.common.constant.enums.PlanStatus;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -39,9 +38,6 @@ public class PlanRequest {
 
     @Schema(description = "Currency code; defaults to VND when omitted.", example = "VND")
     String currency;
-
-    @Schema(description = "active | draft | archived; defaults to draft when omitted.", example = "active")
-    PlanStatus status;
 
     @Schema(example = "true")
     Boolean popular;

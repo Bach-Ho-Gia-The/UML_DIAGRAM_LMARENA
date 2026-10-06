@@ -90,7 +90,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_NOT_FOUND));
         if (target.getStatus() != PlanStatus.ACTIVE) {
             // Không cho đặt hạ xuống gói DRAFT/ARCHIVED.
-            throw new AppException(ErrorCode.SUBSCRIPTION_NOT_ACTIVE);
+            throw new AppException(ErrorCode.PLAN_NOT_ACTIVE);
         }
         if (target.isContactSales()) {
             throw new AppException(ErrorCode.PLAN_CONTACT_SALES_REQUIRED);

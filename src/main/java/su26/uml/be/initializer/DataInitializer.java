@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
 import su26.uml.be.features.plan.entity.FeatureCatalog;
+import su26.uml.be.features.plan.entity.PlanFeature;
 import su26.uml.be.features.user.entity.Role;
 import su26.uml.be.features.plan.entity.Plan;
 import su26.uml.be.features.project.entity.Sheet;
@@ -149,6 +150,16 @@ public class DataInitializer implements CommandLineRunner {
         seedFeature(planId, PlanFeatureKey.MAX_DIAGRAMS, diagrams);
         seedFeature(planId, PlanFeatureKey.EXPORT_PDF, exportPdf);
         seedFeature(planId, PlanFeatureKey.MAX_COLLABORATORS, collaborators);
+    }
+
+    /** Limit hiện tại của plan theo key (dùng cho seed snapshot). 0 nếu chưa đặt. */
+    private int limitOf(Plan plan, PlanFeatureKey key) {
+        return plan.getPlanFeatures().stream()
+                .filter(f -> f.getFeatureKey() == key)
+                .map(PlanFeature::getLimitValue)
+                .filter(v -> v != null)
+                .findFirst()
+                .orElse(0);
     }
 
     private void seedFeature(String planId, PlanFeatureKey key, int value) {
@@ -444,6 +455,15 @@ public class DataInitializer implements CommandLineRunner {
                 .currencySnapshot("VND")
                 .billingCycleSnapshot("MONTHLY")
                 .nominalAiLimitSnapshot(600)
+                .snapshotPlanName(standardPlan.getName())
+                .snapshotPlanDescription(standardPlan.getDescription())
+                .snapshotAiQueries(600)
+                .snapshotMaxProjects(limitOf(standardPlan, PlanFeatureKey.MAX_PROJECTS))
+                .snapshotMaxDiagrams(limitOf(standardPlan, PlanFeatureKey.MAX_DIAGRAMS))
+                .snapshotMaxExportPdf(limitOf(standardPlan, PlanFeatureKey.EXPORT_PDF))
+                .snapshotMaxCollaborators(limitOf(standardPlan, PlanFeatureKey.MAX_COLLABORATORS))
+                .snapshotRateLimitPer10s(standardPlan.getRateLimitPer10s())
+                .snapshotRateLimitPerMin(standardPlan.getRateLimitPerMin())
                 .build();
         sub = subscriptionRepository.save(sub);
 

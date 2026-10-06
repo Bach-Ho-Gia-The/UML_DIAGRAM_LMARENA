@@ -54,6 +54,40 @@ public class Subscription extends BaseEntity {
     @Column(name = "nominal_ai_limit_snapshot")
     Integer nominalAiLimitSnapshot;
 
+    // ─── Entitlement snapshot (đóng băng TOÀN BỘ quyền lợi lúc mua) ───
+    // Luật: admin sửa gói (kể cả gói đang ACTIVE hoặc ARCHIVED) thì user đang dùng gói đó
+    // VẪN giữ quyền lợi bản cũ tới hết kỳ. Hết kỳ renew → snapshot mới theo metadata mới.
+    // Nullable: sub cũ (trước khi có cơ chế này) → null → các service fallback về live plan.
+
+    /** Tên gói tại thời điểm mua — hiển thị cho user, không đổi khi admin đổi tên gói. */
+    @Column(name = "snapshot_plan_name", length = 255)
+    String snapshotPlanName;
+
+    @Column(name = "snapshot_plan_description", columnDefinition = "TEXT")
+    String snapshotPlanDescription;
+
+    /** AI quota (plan_features.AI_QUERIES). -1 = unlimited. */
+    @Column(name = "snapshot_ai_queries")
+    Integer snapshotAiQueries;
+
+    @Column(name = "snapshot_max_projects")
+    Integer snapshotMaxProjects;
+
+    @Column(name = "snapshot_max_diagrams")
+    Integer snapshotMaxDiagrams;
+
+    @Column(name = "snapshot_max_export_pdf")
+    Integer snapshotMaxExportPdf;
+
+    @Column(name = "snapshot_max_collaborators")
+    Integer snapshotMaxCollaborators;
+
+    @Column(name = "snapshot_rate_limit_per10s")
+    Integer snapshotRateLimitPer10s;
+
+    @Column(name = "snapshot_rate_limit_per_min")
+    Integer snapshotRateLimitPerMin;
+
     // ─── Cancel Subscription (graceful downgrade) ───
     /** True = user đã hủy gia hạn; vẫn giữ Premium tới endDate, hết kỳ về base. Status GIỮ ACTIVE. */
     @Column(name = "cancel_at_period_end", nullable = false, columnDefinition = "boolean default false")

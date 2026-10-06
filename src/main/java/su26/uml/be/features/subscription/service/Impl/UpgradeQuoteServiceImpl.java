@@ -14,6 +14,7 @@ import su26.uml.be.features.subscription.dto.QuotaSnapshot;
 import su26.uml.be.features.subscription.dto.SubscriptionSnapshot;
 import su26.uml.be.features.subscription.dto.UpgradeQuoteResponse;
 import su26.uml.be.features.plan.entity.Plan;
+import su26.uml.be.common.constant.enums.PlanStatus;
 import su26.uml.be.features.plan.entity.PlanFeature;
 import su26.uml.be.features.subscription.entity.Subscription;
 import su26.uml.be.common.constant.enums.PlanFeatureKey;
@@ -127,8 +128,13 @@ public class UpgradeQuoteServiceImpl implements UpgradeQuoteService {
     }
 
     private Plan requirePlan(UUID planId) {
-        return planRepository.findById(planId)
+        Plan plan = planRepository.findById(planId)
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_NOT_FOUND));
+        if (plan.getStatus() != PlanStatus.ACTIVE) {
+            // Không cho quote/nâng/hạ lên gói DRAFT/ARCHIVED.
+            throw new AppException(ErrorCode.PLAN_NOT_ACTIVE);
+        }
+        return plan;
     }
 
     private SubscriptionSnapshot buildSubscriptionSnapshot(Subscription current) {

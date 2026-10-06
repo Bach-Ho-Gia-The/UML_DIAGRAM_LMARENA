@@ -33,6 +33,9 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
     long countByPlanAndStatus(Plan plan, SubscriptionStatus status);
     boolean existsByPlanAndStatus(Plan plan, SubscriptionStatus status);
 
+    /** Gói đã từng có BẤT KỲ subscription nào (mọi status) — dùng để chặn hard-delete. */
+    boolean existsByPlan(Plan plan);
+
     /** Gói ACTIVE hiện tại của user (mới nhất theo endDate), chỉ lấy sub chưa hết hạn. */
     Optional<Subscription> findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(UUID userId, SubscriptionStatus status, LocalDateTime dateTime);
 

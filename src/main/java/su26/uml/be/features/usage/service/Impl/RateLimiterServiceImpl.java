@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import su26.uml.be.features.plan.entity.Plan;
 import su26.uml.be.common.constant.enums.PlanStatus;
 import su26.uml.be.common.exception.AppException;
 import su26.uml.be.common.exception.ErrorCode;
@@ -37,9 +36,11 @@ public class RateLimiterServiceImpl implements RateLimiterService {
             per10s = planRepository.findMaxRatePer10s();
             perMin = planRepository.findMaxRatePerMin();
         } else {
-            Plan plan = currentPlan(userId);
-            per10s = plan == null ? null : plan.getRateLimitPer10s();
-            perMin = plan == null ? null : plan.getRateLimitPerMin();
+            // Rate limit cũng theo entitlement snapshot: admin sửa gói (kể cả ACTIVE/ARCHIVED)
+            // không dịch chuyển ngưỡng mà user đang chịu cho tới hết kỳ.
+            PlanResolutionService.Entitlements e = planResolutionService.resolveEntitlements(userId);
+            per10s = e.rateLimitPer10s();
+            perMin = e.rateLimitPerMin();
         }
         hit("rl:" + userId + ":10s", 10, per10s);
         hit("rl:" + userId + ":60s", 60, perMin);
@@ -63,14 +64,4 @@ public class RateLimiterServiceImpl implements RateLimiterService {
         }
     }
 
-    /**
-     * Gói hiện tại — nguồn duy nhất: PlanResolutionService (paid sub -> gói của sub;
-     * không có -> gói mặc định isDefaultPlan). Trước đây chỗ này là bản sao thứ 7 của logic
-     * fallback 'gói ACTIVE rẻ nhất' — sau khi bỏ co base-plan và cho price = null, fallback theo
-     * giá sẽ áp nhầm ngưỡng rate-limit của gói rẻ nhất (hoặc bỏ qua giới hạn nếu gói đó không
-     * cấu hình rate limit) cho mọi user chưa có subscription.
-     */
-    private Plan currentPlan(UUID userId) {
-        return planResolutionService.resolveEffectivePlan(userId).orElse(null);
-    }
 }

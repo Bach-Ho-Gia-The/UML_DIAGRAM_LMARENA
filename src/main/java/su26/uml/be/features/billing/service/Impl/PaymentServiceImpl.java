@@ -11,6 +11,7 @@ import su26.uml.be.features.plan.entity.Plan;
 import su26.uml.be.features.subscription.entity.Subscription;
 import su26.uml.be.features.user.entity.User;
 import su26.uml.be.common.constant.enums.PaymentStatus;
+import su26.uml.be.common.constant.enums.PlanStatus;
 import su26.uml.be.common.constant.enums.SubscriptionStatus;
 import su26.uml.be.common.exception.AppException;
 import su26.uml.be.common.exception.ErrorCode;
@@ -64,6 +65,10 @@ public class PaymentServiceImpl implements PaymentService {
         // nếu không .amount(null) sẽ NPE và PayOS không nhận được số tiền hợp lệ.
         if (plan.isContactSales()) {
             throw new AppException(ErrorCode.PLAN_CONTACT_SALES_REQUIRED);
+        }
+        if (plan.getStatus() != PlanStatus.ACTIVE) {
+            // Không bán gói DRAFT/ARCHIVED.
+            throw new AppException(ErrorCode.PLAN_NOT_ACTIVE);
         }
 
         String randomSuffix = String.format("%02d", new java.util.Random().nextInt(100));

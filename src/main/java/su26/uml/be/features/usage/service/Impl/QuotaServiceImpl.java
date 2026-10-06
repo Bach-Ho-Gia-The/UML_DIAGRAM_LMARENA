@@ -165,7 +165,11 @@ public class QuotaServiceImpl implements QuotaService {
         // fail loud (NO_DEFAULT_PLAN) chu khong suy theo gia (D5). Khong con fallback 'gia re nhat'.
         Plan plan = subOpt.map(Subscription::getPlan)
                 .orElseGet(planResolutionService::requireDefaultPlan);
-        int limit = aiLimitOf(plan);
+        // Có sub → AI limit lấy từ ENTITLEMENT SNAPSHOT (đóng băng lúc mua): admin sửa gói sau
+        // đó không dịch chuyển quota của user đang dùng. Không có sub → live default plan (fail loud).
+        int limit = subOpt.isPresent()
+                ? aiQuotaOf(planResolutionService.entitlementsOf(subOpt.get()))
+                : aiLimitOf(plan);
         q.setAiLimit(limit);
         q.setSubscriptionId(subOpt.map(Subscription::getId).orElse(null));
         // Paid: reset theo hết hạn subscription (kỳ billing). Gói tier thấp nhất (Free, không có sub):
@@ -181,12 +185,11 @@ public class QuotaServiceImpl implements QuotaService {
         userQuotaRepository.save(q);
     }
 
-    /** Gói hiện tại — nguồn duy nhất: PlanResolutionService (paid sub -> gói; không có -> gói mặc định). */
-    private Plan currentPlan(UUID userId) {
-        return planResolutionService.resolveEffectivePlan(userId).orElse(null);
+    /** AI quota từ entitlement; null/0 → 0 (chặn). */
+    private int aiQuotaOf(PlanResolutionService.Entitlements e) {
+        return e != null && e.aiQueries() != null ? e.aiQueries() : 0;
     }
 
-    /** AI_QUERIES của gói; null (chưa đặt) / không có gói → 0 (chặn). -1 = unlimited. */
     private int aiLimitOf(Plan plan) {
         if (plan == null) {
             return 0;

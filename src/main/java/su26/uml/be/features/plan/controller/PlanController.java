@@ -10,6 +10,7 @@ import lombok.experimental.FieldDefaults;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import su26.uml.be.features.plan.dto.PlanRequest;
+import su26.uml.be.features.plan.dto.PlanStatusRequest;
 import su26.uml.be.common.response.ApiResponse;
 import su26.uml.be.features.plan.dto.PlanResponse;
 import su26.uml.be.features.plan.service.PlanService;
@@ -68,11 +69,25 @@ public class PlanController {
         return planService.updatePlan(id, request);
     }
 
+    @PutMapping("/admin/plans/{id}/status")
+    @PreAuthorize("hasRole('ADMIN')")
+    @Operation(summary = "Change plan status (admin)",
+            description = "Đổi trạng thái gói — endpoint RIÊNG, status không còn nằm trong body create/update. "
+                    + "Chuyển hợp lệ: DRAFT→ACTIVE (bán), DRAFT→ARCHIVED, ACTIVE→ARCHIVED (ngừng bán — user "
+                    + "đang dùng vẫn giữ quyền tới hết kỳ), ARCHIVED→ACTIVE (bán lại). "
+                    + "Mọi chuyển về DRAFT bị từ chối (PLAN_STATE_TRANSITION_DENIED). "
+                    + "Gói default ACTIVE cuối cùng không được rời ACTIVE (LAST_DEFAULT_PLAN_DENIED).")
+    public ApiResponse<PlanResponse> changePlanStatus(@PathVariable UUID id,
+            @Valid @RequestBody PlanStatusRequest request) {
+        return planService.changePlanStatus(id, request.getStatus());
+    }
+
     @DeleteMapping("/admin/plans/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Delete plan (admin)",
-            description = "Hard-deletes a plan. Rejected if it still has active subscribers (use archived status instead) "
-                    + "or if it is the last ACTIVE default plan (LAST_DEFAULT_PLAN_DENIED).")
+            description = "Hard-deletes a plan. Rejected if the plan has ANY subscription history "
+                    + "(use ARCHIVED status instead) or if it is the last ACTIVE default plan "
+                    + "(LAST_DEFAULT_PLAN_DENIED).")
     public ApiResponse<Void> deletePlan(@PathVariable UUID id) {
         return planService.deletePlan(id);
     }

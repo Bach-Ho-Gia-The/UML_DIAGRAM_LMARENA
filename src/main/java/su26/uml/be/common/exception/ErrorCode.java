@@ -131,7 +131,7 @@ public enum ErrorCode {
     PLAN_NAME_REQUIRED(2110, "Tên gói không được để trống", HttpStatus.BAD_REQUEST),
     PLAN_PRICE_INVALID(2112, "Giá gói phải lớn hơn hoặc bằng 0", HttpStatus.BAD_REQUEST),
     PLAN_NAME_EXISTED(2113, "Tên gói đã tồn tại", HttpStatus.BAD_REQUEST),
-    PLAN_HAS_SUBSCRIBERS(2114, "Không thể xoá gói đang có người đăng ký. Hãy chuyển sang trạng thái archived.", HttpStatus.BAD_REQUEST),
+    PLAN_HAS_SUBSCRIBERS(2114, "Không thể xoá gói đã từng có người đăng ký. Hãy dùng trạng thái ARCHIVED để ẩn gói và chặn bán mới.", HttpStatus.BAD_REQUEST),
 
     // FEATURE CATALOG ERRORS
     FEATURE_LABEL_REQUIRED(2120, "Tên tính năng không được để trống", HttpStatus.BAD_REQUEST),
@@ -195,6 +195,8 @@ public enum ErrorCode {
     USE_UPGRADE_ENDPOINT(2159, "Đây là thao tác nâng gói — hãy dùng API upgrade.", HttpStatus.BAD_REQUEST),
     SUBSCRIPTION_NOT_ACTIVE(2160, "Gói chưa ở trạng thái hiệu lực.", HttpStatus.BAD_REQUEST),
     NO_PENDING_PLAN_CHANGE(2161, "Không có thay đổi gói nào đang chờ hiệu lực.", HttpStatus.BAD_REQUEST),
+    PLAN_NOT_ACTIVE(2162, "Gói chưa ở trạng thái hiệu lực — không thể mua, nâng hoặc hạ gói.", HttpStatus.BAD_REQUEST),
+    PLAN_STATE_TRANSITION_DENIED(2163, "Chuyển trạng thái không hợp lệ. Gói đang bán (ACTIVE) chỉ được chuyển sang ARCHIVED; gói ARCHIVED chỉ được chuyển về ACTIVE. Không gói nào được quay về DRAFT.", HttpStatus.BAD_REQUEST),
     ;
 
     private int code;
