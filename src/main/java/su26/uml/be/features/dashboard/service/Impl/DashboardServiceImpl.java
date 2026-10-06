@@ -88,9 +88,11 @@ public class DashboardServiceImpl implements DashboardService {
                 .map(s -> s.getMau())
                 .orElse(0L);
 
-        BigDecimal mrr = subscriptionRepository.findByStatus(SubscriptionStatus.ACTIVE).stream()
-                .map(s -> s.getPlan().getPrice())
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // T15 (V4): MRR = SUM(plan.price). Dùng SUM trong SQL (sumPlanPriceByStatus) thay vì
+        // reduce in-memory: (1) SUM bỏ qua NULL nên gói contactSales (price = null) không NPE;
+        // (2) getOverview KHÔNG @Transactional — đọc s.getPlan().getPrice() (LAZY) ngoài session
+        //     sẽ ném LazyInitializationException (đúng lỗi A2 mà repository method sinh ra để tránh).
+        BigDecimal mrr = subscriptionRepository.sumPlanPriceByStatus(SubscriptionStatus.ACTIVE);
 
         long activeBefore30d = subscriptionRepository.countByStartDateBeforeAndStatus(last30d, SubscriptionStatus.ACTIVE);
         long churned30d = subscriptionRepository.countByStatusAndEndDateBetween(SubscriptionStatus.EXPIRED, last30d, now)

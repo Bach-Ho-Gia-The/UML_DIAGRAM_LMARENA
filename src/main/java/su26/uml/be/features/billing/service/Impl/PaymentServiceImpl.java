@@ -60,6 +60,12 @@ public class PaymentServiceImpl implements PaymentService {
         Plan plan = planRepository.findById(planId)
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_NOT_FOUND));
 
+        // T14 (V3): gói báo giá có price = null — PHẢI chặn TRƯỚC khi đụng getPrice(),
+        // nếu không .amount(null) sẽ NPE và PayOS không nhận được số tiền hợp lệ.
+        if (plan.isContactSales()) {
+            throw new AppException(ErrorCode.PLAN_CONTACT_SALES_REQUIRED);
+        }
+
         String randomSuffix = String.format("%02d", new java.util.Random().nextInt(100));
         long epochSeconds = System.currentTimeMillis() / 1000;
         Long orderCode = Long.parseLong(epochSeconds + randomSuffix);

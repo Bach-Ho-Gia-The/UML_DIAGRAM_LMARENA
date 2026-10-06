@@ -23,6 +23,7 @@ import su26.uml.be.features.plan.repository.PlanRepository;
 import su26.uml.be.features.subscription.repository.SubscriptionRepository;
 import su26.uml.be.features.plan.service.PlanService;
 
+import java.math.BigDecimal;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
@@ -83,15 +84,16 @@ public class PlanServiceImpl implements PlanService {
         }
 
         validatePlanRequest(request, null);
-        applyDefaults(request);
+        applyDefaultsForCreate(request); // CHỈ create — update KHÔNG gọi (C8: không hạ gói ACTIVE về DRAFT)
         Plan plan = planMapper.toPlan(request);
+        normalizePrice(plan, request);
         applyLimits(plan, request);
         if (request.getEnabledFeatureIds() != null) {
             plan.setEnabledFeatureIds(new HashSet<>(request.getEnabledFeatureIds()));
         }
 
         Plan saved = planRepository.save(plan);
-        renumberTierOrderByPrice();
+        renumberTierOrder();
         return ApiResponse.success("Tạo gói thành công",
                 buildResponse(planRepository.findById(saved.getId()).orElse(saved), loadCatalog()));
     }
@@ -111,6 +113,8 @@ public class PlanServiceImpl implements PlanService {
         validatePlanRequest(request, plan);
         // Partial update of scalar fields (nulls ignored by the mapper).
         planMapper.updatePlan(request, plan);
+        // D2: contactSales=true ⇒ price = null (mapper không tự clear được khi price không được gửi).
+        normalizePrice(plan, request);
 
         // Limits & enabled features are replaced only when explicitly provided.
         if (request.getLimits() != null) {
@@ -121,7 +125,7 @@ public class PlanServiceImpl implements PlanService {
         }
 
         Plan saved = planRepository.save(plan);
-        renumberTierOrderByPrice();
+        renumberTierOrder();
         return ApiResponse.success("Cập nhật gói thành công",
                 buildResponse(planRepository.findById(saved.getId()).orElse(saved), loadCatalog()));
     }
@@ -132,57 +136,33 @@ public class PlanServiceImpl implements PlanService {
         Plan plan = planRepository.findById(id)
                 .orElseThrow(() -> new AppException(ErrorCode.PLAN_NOT_FOUND));
 
-        if (Boolean.TRUE.equals(plan.getIsBasePlan())) {
-            throw new AppException(ErrorCode.PLAN_BASE_DELETE_DENIED);
+        // D7: không xoá gói mặc định ACTIVE cuối cùng — hệ thống phải luôn có 1 default plan.
+        if (isActiveDefault(plan)
+                && planRepository.countByStatusAndIsDefaultPlanTrueAndIdNot(PlanStatus.ACTIVE, plan.getId()) == 0) {
+            throw new AppException(ErrorCode.LAST_DEFAULT_PLAN_DENIED);
         }
 
+        // D8: không xoá gói còn subscriber ACTIVE.
         if (subscriptionRepository.existsByPlanAndStatus(plan, SubscriptionStatus.ACTIVE)) {
             throw new AppException(ErrorCode.PLAN_HAS_SUBSCRIBERS);
         }
 
         planRepository.delete(plan);
-        renumberTierOrderByPrice();
-        return ApiResponse.<Void>builder().build();
+        renumberTierOrder();
+        return ApiResponse.success("Xoá gói thành công", null);
     }
 
     @Override
     @Transactional
     public ApiResponse<List<PlanResponse>> reorderPlans() {
-        renumberTierOrderByPrice();
+        renumberTierOrder();
         return getAllPlans();
     }
 
-    // --- helpers ---
-
-    private void validatePlanRequest(PlanRequest request, Plan existing) {
-        // price >= 0 (null đã bị @NotNull chặn ở DTO, guard thêm để defense-in-depth)
-        if (request.getPrice() == null || request.getPrice().compareTo(java.math.BigDecimal.ZERO) < 0) {
-            throw new AppException(ErrorCode.PLAN_PRICE_INVALID);
-        }
-
-        // isBasePlan: only one true in the system
-        if (Boolean.TRUE.equals(request.getIsBasePlan())) {
-            boolean alreadyHasBase = planRepository.findByIsBasePlanTrue()
-                    .map(p -> existing == null || !p.getId().equals(existing.getId()))
-                    .orElse(false);
-            if (alreadyHasBase) {
-                throw new AppException(ErrorCode.BASE_PLAN_ALREADY_EXISTS);
-            }
-        }
-
-        // Giá unique (không cho 2 gói cùng giá) — nền cho auto tierOrder theo giá.
-        boolean priceTaken = existing == null
-                ? planRepository.existsByPrice(request.getPrice())
-                : planRepository.existsByPriceAndIdNot(request.getPrice(), existing.getId());
-        if (priceTaken) {
-            throw new AppException(ErrorCode.PLAN_PRICE_DUPLICATE);
-        }
-        // tierOrder KHÔNG do admin nhập — BE tự tính theo giá (renumberTierOrderByPrice sau khi lưu).
-    }
-
-    /** Gán tierOrder = 0,1,2... theo giá tăng dần cho các gói ACTIVE (giá unique → không trùng). */
-    private void renumberTierOrderByPrice() {
-        List<Plan> active = planRepository.findByStatusOrderByPriceAsc(PlanStatus.ACTIVE);
+    @Override
+    @Transactional
+    public void renumberTierOrder() {
+        List<Plan> active = planRepository.findAllOrderedByTier(PlanStatus.ACTIVE);
         int order = 0;
         for (Plan p : active) {
             if (!Integer.valueOf(order).equals(p.getTierOrder())) {
@@ -191,6 +171,99 @@ public class PlanServiceImpl implements PlanService {
             order++;
         }
         planRepository.saveAll(active);
+    }
+
+    // --- helpers ---
+
+    /**
+     * Validate create/update gói:
+     * <ul>
+     *   <li>D2 — contactSales=true ⇒ price phải null/0 (hệ thống ép null); contactSales=false ⇒ price bắt buộc và &gt;= 0</li>
+     *   <li>D7 — chỉ 1 gói mặc định ACTIVE; không được bỏ mặc định / hạ trạng thái của gói mặc định ACTIVE cuối cùng</li>
+     *   <li>D8 — không archive gói còn subscriber ACTIVE</li>
+     * </ul>
+     */
+    private void validatePlanRequest(PlanRequest request, Plan existing) {
+        // ── D2: price ──
+        boolean contactSales = effectiveContactSales(request, existing);
+        BigDecimal price = request.getPrice() != null ? request.getPrice()
+                : (existing != null ? existing.getPrice() : null);
+        if (contactSales) {
+            // Gói báo giá: giá dương là sai (admin phải clear price trước). price = null/0 → ép null ở normalizePrice.
+            if (price != null && price.compareTo(java.math.BigDecimal.ZERO) > 0) {
+                throw new AppException(ErrorCode.ENTERPRISE_PRICE_MUST_BE_NULL);
+            }
+        } else {
+            if (price == null) {
+                throw new AppException(ErrorCode.SELF_SERVE_PRICE_REQUIRED);
+            }
+            if (price.compareTo(java.math.BigDecimal.ZERO) < 0) {
+                throw new AppException(ErrorCode.PLAN_PRICE_INVALID);
+            }
+        }
+
+        // ── D7: default plan ──
+        boolean isDefault = effectiveIsDefault(request, existing);
+        PlanStatus status = effectiveStatus(request, existing);
+        long otherActiveDefaults = existing != null
+                ? planRepository.countByStatusAndIsDefaultPlanTrueAndIdNot(PlanStatus.ACTIVE, existing.getId())
+                : (planRepository.existsByStatusAndIsDefaultPlanTrue(PlanStatus.ACTIVE) ? 1L : 0L);
+
+        if (isDefault && status == PlanStatus.ACTIVE && otherActiveDefaults > 0) {
+            throw new AppException(ErrorCode.DEFAULT_PLAN_ALREADY_EXISTS);
+        }
+        // Gói đang là default: nếu là default ACTIVE cuối cùng thì không được bỏ cờ / rời ACTIVE.
+        if (existing != null && Boolean.TRUE.equals(existing.getIsDefaultPlan())
+                && otherActiveDefaults == 0
+                && !(isDefault && status == PlanStatus.ACTIVE)) {
+            throw new AppException(ErrorCode.LAST_DEFAULT_PLAN_DENIED);
+        }
+
+        // ── D8: archive gói có subscriber ──
+        if (existing != null
+                && status == PlanStatus.ARCHIVED
+                && existing.getStatus() != PlanStatus.ARCHIVED
+                && subscriptionRepository.existsByPlanAndStatus(existing, SubscriptionStatus.ACTIVE)) {
+            throw new AppException(ErrorCode.PLAN_HAS_SUBSCRIBERS);
+        }
+    }
+
+    private boolean isActiveDefault(Plan plan) {
+        return Boolean.TRUE.equals(plan.getIsDefaultPlan()) && plan.getStatus() == PlanStatus.ACTIVE;
+    }
+
+    private boolean effectiveContactSales(PlanRequest request, Plan existing) {
+        if (request.getContactSales() != null) {
+            return request.getContactSales();
+        }
+        return existing != null && existing.isContactSales();
+    }
+
+    private boolean effectiveIsDefault(PlanRequest request, Plan existing) {
+        if (request.getIsDefaultPlan() != null) {
+            return request.getIsDefaultPlan();
+        }
+        return existing != null && Boolean.TRUE.equals(existing.getIsDefaultPlan());
+    }
+
+    private PlanStatus effectiveStatus(PlanRequest request, Plan existing) {
+        if (request.getStatus() != null) {
+            return request.getStatus();
+        }
+        if (existing != null && existing.getStatus() != null) {
+            return existing.getStatus();
+        }
+        return PlanStatus.DRAFT;
+    }
+
+    /** D2: gói báo giá không được có giá — ép price = null sau khi mapper đã map. */
+    private void normalizePrice(Plan plan, PlanRequest request) {
+        boolean contactSales = request.getContactSales() != null
+                ? request.getContactSales()
+                : plan.isContactSales();
+        if (contactSales) {
+            plan.setPrice(null);
+        }
     }
 
     private List<FeatureCatalog> loadCatalog() {
@@ -215,7 +288,11 @@ public class PlanServiceImpl implements PlanService {
         return planMapper.toPlanResponse(plan, subscribers, cells);
     }
 
-    private void applyDefaults(PlanRequest request) {
+    /**
+     * Defaults CHỈ áp dụng khi tạo gói. Update tuyệt đối không gọi: set status=DRAFT sẽ hạ
+     * gói ACTIVE về DRAFT nếu admin không gửi status (lỗi C8 trong planning).
+     */
+    private void applyDefaultsForCreate(PlanRequest request) {
         if (request.getCurrency() == null || request.getCurrency().isBlank()) {
             request.setCurrency("VND");
         }
@@ -233,6 +310,10 @@ public class PlanServiceImpl implements PlanService {
         }
         if (request.getContactSales() == null) {
             request.setContactSales(false);
+        }
+        // is_default_plan NOT NULL — chuẩn hoá null → false LÚC TẠO (không phải normalize false ở update).
+        if (request.getIsDefaultPlan() == null) {
+            request.setIsDefaultPlan(false);
         }
     }
 

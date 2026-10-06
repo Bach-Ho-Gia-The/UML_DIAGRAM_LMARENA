@@ -8,17 +8,14 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import su26.uml.be.features.plan.entity.Plan;
-import su26.uml.be.features.subscription.entity.Subscription;
 import su26.uml.be.common.constant.enums.PlanStatus;
-import su26.uml.be.common.constant.enums.SubscriptionStatus;
 import su26.uml.be.common.exception.AppException;
 import su26.uml.be.common.exception.ErrorCode;
 import su26.uml.be.features.plan.repository.PlanRepository;
-import su26.uml.be.features.subscription.repository.SubscriptionRepository;
+import su26.uml.be.features.plan.service.PlanResolutionService;
 import su26.uml.be.features.usage.service.RateLimiterService;
 
 import java.time.Duration;
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
@@ -28,7 +25,7 @@ import java.util.UUID;
 public class RateLimiterServiceImpl implements RateLimiterService {
 
     StringRedisTemplate redis;
-    SubscriptionRepository subscriptionRepository;
+    PlanResolutionService planResolutionService;
     PlanRepository planRepository;
 
     @Override
@@ -66,13 +63,14 @@ public class RateLimiterServiceImpl implements RateLimiterService {
         }
     }
 
-    /** Gói hiện tại: subscription ACTIVE (chưa hết hạn) → gói; nếu không có → gói ACTIVE giá thấp nhất. */
+    /**
+     * Gói hiện tại — nguồn duy nhất: PlanResolutionService (paid sub -> gói của sub;
+     * không có -> gói mặc định isDefaultPlan). Trước đây chỗ này là bản sao thứ 7 của logic
+     * fallback 'gói ACTIVE rẻ nhất' — sau khi bỏ co base-plan và cho price = null, fallback theo
+     * giá sẽ áp nhầm ngưỡng rate-limit của gói rẻ nhất (hoặc bỏ qua giới hạn nếu gói đó không
+     * cấu hình rate limit) cho mọi user chưa có subscription.
+     */
     private Plan currentPlan(UUID userId) {
-        return subscriptionRepository
-                .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, LocalDateTime.now())
-                .map(Subscription::getPlan)
-                .orElseGet(() -> planRepository
-                        .findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE)
-                        .orElse(null));
+        return planResolutionService.resolveEffectivePlan(userId).orElse(null);
     }
 }

@@ -1,6 +1,7 @@
 package su26.uml.be.features.subscription.repository;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -45,4 +46,18 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, UUID
      */
     Optional<Subscription> findFirstByUser_IdAndStatusInAndStartDateLessThanEqualAndEndDateAfterOrderByEndDateDesc(
             UUID userId, List<SubscriptionStatus> statuses, LocalDateTime start, LocalDateTime end);
+
+    // ─── Booked downgrade (hướng A) ───
+    /** Sub đang chờ chuyển gói (hạ cấp đã đặt) của user — để GET /me/subscription hiện banner. */
+    Optional<Subscription> findFirstByUser_IdAndPendingPlanIdIsNotNullOrderByEndDateDesc(UUID userId);
+
+    /**
+     * Xoá mọi thay đổi pending của user (T22: sau khi kích hoạt gói mới/nâng cấp thành công,
+     * hoặc khi user huỷ thay đổi chờ). Clear TOÀN BỘ row của user để banner không bám lại
+     * ở row EXPIRED/REPLACED cũ.
+     */
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
+    @Query("UPDATE Subscription s SET s.pendingPlanId = null, s.pendingEffectiveAt = null "
+            + "WHERE s.user.id = :userId AND s.pendingPlanId IS NOT NULL")
+    int clearPendingForUser(@Param("userId") UUID userId);
 }

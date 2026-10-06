@@ -59,6 +59,15 @@ public class SubscriptionActivationServiceImpl implements SubscriptionActivation
         } else {
             activateNew(user, tx);
         }
+
+        // T22: kích hoạt thành công → xoá mọi thay đổi pending (hạ cấp đã đặt) của user.
+        // Không clear thì banner "sắp hạ gói" vẫn hiện dù user vừa mua/nâng gói mới.
+        int cleared = subscriptionRepository.clearPendingForUser(user.getId());
+        if (cleared > 0) {
+            log.info("Cleared {} pending plan change(s) for user {} after activation (orderCode={})",
+                    cleared, user.getUsername(), orderCode);
+        }
+
         log.info("Activated {} for user {} (orderCode={})",
                 tx.getType(), user.getUsername(), orderCode);
     }
@@ -107,13 +116,16 @@ public class SubscriptionActivationServiceImpl implements SubscriptionActivation
             end = oldSub != null ? oldSub.getEndDate() : now.plusDays(periodDaysOf(target));
         }
 
+        // Defense-in-depth: cả 2 đường tạo payment (PaymentServiceImpl.createPaymentLink và
+        // UpgradePaymentServiceImpl.createIntentPayment) đã chặn gói contactSales trước khi vào đây,
+        // nên target.getPrice() khác null. Guard ZERO để snapshot không bao giờ null.
         Subscription sub = Subscription.builder()
                 .user(user)
                 .plan(target)
                 .status(SubscriptionStatus.ACTIVE)
                 .startDate(now)
                 .endDate(end)
-                .billingPriceSnapshot(target.getPrice())
+                .billingPriceSnapshot(target.getPrice() != null ? target.getPrice() : java.math.BigDecimal.ZERO)
                 .currencySnapshot(target.getCurrency())
                 .billingCycleSnapshot("MONTHLY")
                 .nominalAiLimitSnapshot(aiLimitOf(target))

@@ -15,6 +15,13 @@ public interface PlanService {
     ApiResponse<PlanResponse> updatePlan(UUID id, PlanRequest request);
     ApiResponse<Void> deletePlan(UUID id);
 
-    /** Gán lại tierOrder = 0,1,2... theo giá tăng dần cho các gói ACTIVE. */
+    /**
+     * Gán lại tierOrder = 0,1,2... cho cac goi ACTIVE theo thứ tự D4:
+     * isDefaultPlan -> contactSales -> price ASC NULLS LAST -> createdAt ASC.
+     * Không trả ApiResponse vì còn được gọi nội bộ (create/update/delete) và từ DataInitializer.
+     */
+    void renumberTierOrder();
+
+    /** Endpoint admin: renumber tierOrder rồi trả toàn bộ gói (để FE vẽ bảng tier mới). */
     ApiResponse<List<PlanResponse>> reorderPlans();
 }

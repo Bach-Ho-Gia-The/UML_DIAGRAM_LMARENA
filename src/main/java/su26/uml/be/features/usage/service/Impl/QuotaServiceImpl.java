@@ -12,11 +12,10 @@ import su26.uml.be.features.plan.entity.PlanFeature;
 import su26.uml.be.features.subscription.entity.Subscription;
 import su26.uml.be.features.usage.entity.UserQuota;
 import su26.uml.be.common.constant.enums.PlanFeatureKey;
-import su26.uml.be.common.constant.enums.PlanStatus;
 import su26.uml.be.common.constant.enums.SubscriptionStatus;
 import su26.uml.be.common.exception.AppException;
 import su26.uml.be.common.exception.ErrorCode;
-import su26.uml.be.features.plan.repository.PlanRepository;
+import su26.uml.be.features.plan.service.PlanResolutionService;
 import su26.uml.be.features.subscription.repository.SubscriptionRepository;
 import su26.uml.be.features.usage.repository.UserQuotaRepository;
 import su26.uml.be.features.user.repository.UserRepository;
@@ -38,7 +37,7 @@ public class QuotaServiceImpl implements QuotaService {
 
     UserQuotaRepository userQuotaRepository;
     SubscriptionRepository subscriptionRepository;
-    PlanRepository planRepository;
+    PlanResolutionService planResolutionService;
     UserRepository userRepository;
 
     @Override
@@ -162,10 +161,10 @@ public class QuotaServiceImpl implements QuotaService {
         LocalDateTime now = LocalDateTime.now();
         var subOpt = subscriptionRepository
                 .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, now);
-        Plan plan = subOpt.map(Subscription::getPlan).orElseGet(() ->
-                planRepository.findFirstByIsBasePlanTrueAndStatus(PlanStatus.ACTIVE)
-                        .or(() -> planRepository.findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE))
-                        .orElse(null));
+        // T24: duong reset/fallback cua quota dung requireDefaultPlan() — thieu default plan thi
+        // fail loud (NO_DEFAULT_PLAN) chu khong suy theo gia (D5). Khong con fallback 'gia re nhat'.
+        Plan plan = subOpt.map(Subscription::getPlan)
+                .orElseGet(planResolutionService::requireDefaultPlan);
         int limit = aiLimitOf(plan);
         q.setAiLimit(limit);
         q.setSubscriptionId(subOpt.map(Subscription::getId).orElse(null));
@@ -182,15 +181,9 @@ public class QuotaServiceImpl implements QuotaService {
         userQuotaRepository.save(q);
     }
 
-    /** Gói hiện tại: subscription ACTIVE (chưa hết hạn) → gói; nếu không có → gói base (isBasePlan), fallback giá thấp nhất. */
+    /** Gói hiện tại — nguồn duy nhất: PlanResolutionService (paid sub -> gói; không có -> gói mặc định). */
     private Plan currentPlan(UUID userId) {
-        return subscriptionRepository
-                .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, LocalDateTime.now())
-                .map(s -> s.getPlan())
-                .orElseGet(() -> planRepository
-                        .findFirstByIsBasePlanTrueAndStatus(PlanStatus.ACTIVE)
-                        .or(() -> planRepository.findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE))
-                        .orElse(null));
+        return planResolutionService.resolveEffectivePlan(userId).orElse(null);
     }
 
     /** AI_QUERIES của gói; null (chưa đặt) / không có gói → 0 (chặn). -1 = unlimited. */

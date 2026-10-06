@@ -62,7 +62,7 @@ public class PlanController {
     @PutMapping("/admin/plans/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Update plan (admin)",
-            description = "Full update: send the whole plan object (name & price required). "
+            description = "Partial update: chi cac field duoc gui moi bi thay doi (name/price/status... bo trong = giu nguyen). "
                     + "limits/features are replaced only when included in the body.")
     public ApiResponse<PlanResponse> updatePlan(@PathVariable UUID id, @Valid @RequestBody PlanRequest request) {
         return planService.updatePlan(id, request);
@@ -71,15 +71,18 @@ public class PlanController {
     @DeleteMapping("/admin/plans/{id}")
     @PreAuthorize("hasRole('ADMIN')")
     @Operation(summary = "Delete plan (admin)",
-            description = "Hard-deletes a plan. Rejected if it still has active subscribers (use archived status instead).")
+            description = "Hard-deletes a plan. Rejected if it still has active subscribers (use archived status instead) "
+                    + "or if it is the last ACTIVE default plan (LAST_DEFAULT_PLAN_DENIED).")
     public ApiResponse<Void> deletePlan(@PathVariable UUID id) {
         return planService.deletePlan(id);
     }
 
     @PostMapping("/admin/plans/reorder")
     @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "Reorder plans by price (admin)",
-            description = "Gán lại tierOrder = 0,1,2... theo giá tăng dần cho các gói ACTIVE.")
+    @Operation(summary = "Renumber tierOrder (admin)",
+            description = "Gán lại tierOrder = 0,1,2... cho các gói ACTIVE theo thứ tự: gói mặc định (isDefaultPlan) "
+                    + "-> gói báo giá (contactSales) -> giá tăng dần (NULLS LAST) -> ngày tạo. "
+                    + "tierOrder do hệ thống tự tính, admin không nhập tay.")
     public ApiResponse<List<PlanResponse>> reorderPlans() {
         return planService.reorderPlans();
     }

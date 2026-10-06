@@ -22,4 +22,6 @@ public class PlanSnapshot {
     BigDecimal price;
     String currency;
     int nominalAiLimit;
+    /** Gói báo giá (price = null) — không cho tự thanh toán/quote. */
+    Boolean contactSales;
 }

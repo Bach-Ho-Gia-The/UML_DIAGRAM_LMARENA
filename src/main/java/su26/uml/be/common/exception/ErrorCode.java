@@ -129,11 +129,9 @@ public enum ErrorCode {
 
     // PLAN MANAGEMENT ERRORS
     PLAN_NAME_REQUIRED(2110, "Tên gói không được để trống", HttpStatus.BAD_REQUEST),
-    PLAN_PRICE_REQUIRED(2111, "Giá gói không được để trống", HttpStatus.BAD_REQUEST),
     PLAN_PRICE_INVALID(2112, "Giá gói phải lớn hơn hoặc bằng 0", HttpStatus.BAD_REQUEST),
     PLAN_NAME_EXISTED(2113, "Tên gói đã tồn tại", HttpStatus.BAD_REQUEST),
     PLAN_HAS_SUBSCRIBERS(2114, "Không thể xoá gói đang có người đăng ký. Hãy chuyển sang trạng thái archived.", HttpStatus.BAD_REQUEST),
-    PLAN_BASE_DELETE_DENIED(2115, "Không thể xoá gói cơ bản (base plan). Hãy tạo gói base khác trước.", HttpStatus.BAD_REQUEST),
 
     // FEATURE CATALOG ERRORS
     FEATURE_LABEL_REQUIRED(2120, "Tên tính năng không được để trống", HttpStatus.BAD_REQUEST),
@@ -176,21 +174,27 @@ public enum ErrorCode {
     UPGRADE_TARGET_NOT_HIGHER_TIER(2142, "Chỉ có thể nâng lên gói bậc cao hơn", HttpStatus.BAD_REQUEST),
     PLAN_TIER_NOT_CONFIGURED(2143, "Gói chưa được cấu hình bậc (tierOrder)", HttpStatus.BAD_REQUEST),
     SUBSCRIPTION_ALREADY_ACTIVE(2144, "Bạn đang có gói này còn hiệu lực", HttpStatus.BAD_REQUEST),
-    DOWNGRADE_NOT_ALLOWED_WHILE_ACTIVE(2145, "Không thể hạ gói khi gói hiện tại còn hiệu lực", HttpStatus.BAD_REQUEST),
     QUOTE_EXPIRED(2146, "Báo giá đã hết hạn, vui lòng tạo lại", HttpStatus.BAD_REQUEST),
     PENDING_PAYMENT_EXISTS(2147, "Bạn đang có một giao dịch chờ thanh toán", HttpStatus.CONFLICT),
     PAYMENT_REQUIRES_REVIEW(2148, "Giao dịch cần được kiểm tra thủ công", HttpStatus.CONFLICT),
 
-    // PLAN VALIDATION (isBasePlan + tierOrder)
-    PLAN_TIER_ORDER_DUPLICATE(2116, "Thứ tự bậc (tierOrder) đã tồn tại ở gói khác", HttpStatus.BAD_REQUEST),
-    BASE_PLAN_ALREADY_EXISTS(2117, "Đã có gói cơ bản (base plan). Hãy bỏ đánh dấu gói cũ trước.", HttpStatus.BAD_REQUEST),
-    PLAN_TIER_REQUIRED(2118, "Gói trả phí phải có thứ tự bậc (tierOrder)", HttpStatus.BAD_REQUEST),
-    PLAN_PRICE_DUPLICATE(2119, "Đã có gói với mức giá này", HttpStatus.BAD_REQUEST),
 
     // CANCEL SUBSCRIPTION
     NO_ACTIVE_SUBSCRIPTION(2149, "Bạn chưa có gói trả phí đang hiệu lực để hủy", HttpStatus.BAD_REQUEST),
     SUBSCRIPTION_ALREADY_CANCELLED(2150, "Gói đã được hủy gia hạn trước đó", HttpStatus.BAD_REQUEST),
     SUBSCRIPTION_NOT_CANCELLED(2151, "Gói chưa ở trạng thái hủy gia hạn", HttpStatus.BAD_REQUEST),
+
+    // ─── DEFAULT PLAN + PRICE RULES (refactor co base-plan -> isDefaultPlan, price nullable) ───
+    DEFAULT_PLAN_ALREADY_EXISTS(2152, "Đã có gói mặc định khác đang hoạt động. Hãy bỏ đánh dấu gói cũ trước.", HttpStatus.BAD_REQUEST),
+    LAST_DEFAULT_PLAN_DENIED(2153, "Không thể bỏ đánh dấu / hạ trạng thái gói mặc định cuối cùng. Hãy đặt gói khác làm mặc định trước.", HttpStatus.BAD_REQUEST),
+    ENTERPRISE_PRICE_MUST_BE_NULL(2154, "Gói liên hệ báo giá (contactSales) không được có giá. Hãy xoá price hoặc bỏ contactSales.", HttpStatus.BAD_REQUEST),
+    SELF_SERVE_PRICE_REQUIRED(2155, "Gói tự thanh toán (contactSales=false) bắt buộc phải có price >= 0.", HttpStatus.BAD_REQUEST),
+    NO_DEFAULT_PLAN(2156, "Hệ thống chưa có gói mặc định (isDefaultPlan=true, ACTIVE). Hãy đặt một gói làm mặc định.", HttpStatus.INTERNAL_SERVER_ERROR),
+    PLAN_CONTACT_SALES_REQUIRED(2157, "Gói này yêu cầu liên hệ báo giá — không thể thanh toán trực tuy.", HttpStatus.BAD_REQUEST),
+    PLAN_SAME_TIER(2158, "Gói đích phải ở bậc (tier) thấp hơn gói hiện tại.", HttpStatus.BAD_REQUEST),
+    USE_UPGRADE_ENDPOINT(2159, "Đây là thao tác nâng gói — hãy dùng API upgrade.", HttpStatus.BAD_REQUEST),
+    SUBSCRIPTION_NOT_ACTIVE(2160, "Gói chưa ở trạng thái hiệu lực.", HttpStatus.BAD_REQUEST),
+    NO_PENDING_PLAN_CHANGE(2161, "Không có thay đổi gói nào đang chờ hiệu lực.", HttpStatus.BAD_REQUEST),
     ;
 
     private int code;

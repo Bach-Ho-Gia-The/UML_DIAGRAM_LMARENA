@@ -24,7 +24,7 @@ public class PlanResponse {
     String name;
     String description;
 
-    @Schema(example = "300000")
+    @Schema(description = "Giá gói (VND). null khi contactSales=true (gói báo giá).", example = "300000")
     BigDecimal price;
 
     @Schema(example = "VND")
@@ -58,7 +58,7 @@ public class PlanResponse {
     @Schema(description = "Number of active subscriptions on this plan.", example = "42")
     long subscribers;
 
-    @Schema(description = "Tier ordering: 0 = base, 1, 2, 3...", example = "0")
+    @Schema(description = "Thứ bậc gói do HỆ THỐNG tự gán (admin không nhập): 0 = mặc định … n.", example = "0")
     Integer tierOrder;
 
     @Schema(description = "Billing cycle (MONTHLY / YEARLY).", example = "MONTHLY")
@@ -67,8 +67,8 @@ public class PlanResponse {
     @Schema(description = "Quota period in days.", example = "30")
     Integer quotaPeriodDays;
 
-    @Schema(description = "True if this is the base/fallback plan.", example = "true")
-    Boolean isBasePlan;
+    @Schema(description = "True = gói mặc định của hệ thống (đúng 1 gói ACTIVE).", example = "true")
+    Boolean isDefaultPlan;
 
     @Schema(description = "Numeric usage limits (-1 = unlimited).")
     PlanLimits limits;

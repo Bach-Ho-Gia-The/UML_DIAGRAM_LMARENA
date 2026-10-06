@@ -23,6 +23,7 @@ import su26.uml.be.features.workspace.mapper.WorkspaceItemMapper;
 import su26.uml.be.features.plan.repository.FeatureCatalogRepository;
 import su26.uml.be.features.user.repository.RoleRepository;
 import su26.uml.be.features.plan.repository.PlanRepository;
+import su26.uml.be.features.plan.service.PlanService;
 import su26.uml.be.features.project.repository.SheetRepository;
 import su26.uml.be.features.user.repository.UserRepository;
 import su26.uml.be.features.subscription.repository.SubscriptionRepository;
@@ -50,6 +51,7 @@ public class DataInitializer implements CommandLineRunner {
     UserRepository userRepository;
     RoleRepository roleRepository;
     PlanRepository planRepository;
+    PlanService planService;
     FeatureCatalogRepository featureCatalogRepository;
     SheetRepository sheetRepository;
     WorkspaceItemRepository workspaceItemRepository;
@@ -93,11 +95,14 @@ public class DataInitializer implements CommandLineRunner {
         //     which the sync logic can never expire on its own - they would display forever.
         backfillQuotaResetAt();
 
-        // 4c. Seed tier_order + quota_period_days for 4 sample plans (Phase 1A/1C). Idempotent (only set when null).
-        backfillPlanTierAndPeriod();
-
-        // 4d. Mark Free plan (fixed UUID) as base plan.
-        backfillBasePlan();
+        // 4c. tierOrder do HỆ THỐNG tự tính (D3/D4) — renumber theo: default -> contactSales -> price -> createdAt.
+        //     Thay cho backfill setTier/backfillBasePlan cũ (admin không còn nhập tierOrder, không còn co base-plan).
+        try {
+            planService.renumberTierOrder();
+        } catch (Exception e) {
+            log.warn("renumberTierOrder lúc khởi động thất bại (sẽ tự chạy lại khi admin CRUD gói): {}",
+                    e.getMessage());
+        }
 
         // 4e. Create test upgrade user (Standard plan, 15 days remaining).
         seedUpgradeTestUser();
@@ -166,6 +171,8 @@ public class DataInitializer implements CommandLineRunner {
         if (planRepository.count() == 0) {
             log.info("Initializing default plans via SQL (VND, ACTIVE)...");
 
+            // V6: is_default_plan PHẢI có trong INSERT — nếu không, không gói nào là default và
+            // MỌI resolve gói hiện lực sẽ ném NO_DEFAULT_PLAN (500 toàn hệ thống).
             String sql = """
                 INSERT INTO plans (
                     id,
@@ -177,9 +184,10 @@ public class DataInitializer implements CommandLineRunner {
                     status,
                     description,
                     duration_days,
-                    max_diagrams
+                    max_diagrams,
+                    is_default_plan
                 )
-                VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, 'VND', 'ACTIVE', ?, ?, ?)
+                VALUES (?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, ?, ?, 'VND', 'ACTIVE', ?, ?, ?, ?)
                 """;
 
             // Free
@@ -190,7 +198,8 @@ public class DataInitializer implements CommandLineRunner {
                     0,
                     "For students and hobbyists.",
                     -1,
-                    15);
+                    15,
+                    true);
 
             // Education
             jdbcTemplate.update(
@@ -200,7 +209,8 @@ public class DataInitializer implements CommandLineRunner {
                     29000,
                     "Student plan (requires student verification).",
                     30,
-                    30);
+                    30,
+                    false);
 
             // Standard
             jdbcTemplate.update(
@@ -210,7 +220,8 @@ public class DataInitializer implements CommandLineRunner {
                     49000,
                     "For individual users.",
                     30,
-                    60);
+                    60,
+                    false);
 
             // Pro
             jdbcTemplate.update(
@@ -220,7 +231,8 @@ public class DataInitializer implements CommandLineRunner {
                     99000,
                     "For developers, business analysts and professionals.",
                     30,
-                    100);
+                    100,
+                    false);
 
             log.info("Plans initialized successfully.");
         } else {
@@ -255,6 +267,16 @@ public class DataInitializer implements CommandLineRunner {
                 """;
 
             jdbcTemplate.update(updateSql);
+
+            // DB cũ (chưa drop): is_default_plan NOT NULL default false nên không gói nào là default
+            // sau khi ddl-auto thêm cột → đánh dấu Free làm default nếu hệ thống chưa có default.
+            int defaulted = jdbcTemplate.update(
+                    "UPDATE plans SET is_default_plan = true "
+                            + "WHERE id = '11111111-1111-1111-1111-111111111111' "
+                            + "AND NOT EXISTS (SELECT 1 FROM plans p WHERE p.is_default_plan = true)");
+            if (defaulted > 0) {
+                log.info("Marked Free plan as default plan (legacy DB).");
+            }
 
             log.info("Existing seed plans migrated.");
         }
@@ -302,39 +324,6 @@ public class DataInitializer implements CommandLineRunner {
         });
         userRepository.saveAll(pending);
         log.info("Backfilled profile_completed for {} existing user(s).", pending.size());
-    }
-
-    /**
-     * Idempotent seed for Subscription Phase 1: assign {tier_order} (Free=0 thru Pro=3) and
-     * {quota_period_days=30} for 4 fixed-UUID sample plans. Only set when null - admin manual edits
-     * are preserved, leaving 0 untouched. Needed for upgrade/quota rough-estimate flow (Phase 1C).
-     */
-    private void backfillPlanTierAndPeriod() {
-        setTier("11111111-1111-1111-1111-111111111111", 0); // Free
-        setTier("22222222-2222-2222-2222-222222222222", 1); // Education
-        setTier("33333333-3333-3333-3333-333333333333", 2); // Standard
-        setTier("44444444-4444-4444-4444-444444444444", 3); // Pro
-        int period = jdbcTemplate.update(
-                "UPDATE plans SET quota_period_days = 30 WHERE quota_period_days IS NULL");
-        if (period > 0) {
-            log.info("Backfilled quota_period_days=30 for {} plan(s).", period);
-        }
-    }
-
-    private void setTier(String planId, int tier) {
-        jdbcTemplate.update(
-                "UPDATE plans SET tier_order = ? WHERE id = ? AND tier_order IS NULL",
-                tier, UUID.fromString(planId));
-    }
-
-    /** Đánh dấu gói Free là base plan (idempotent: chỉ set khi null). */
-    private void backfillBasePlan() {
-        int updated = jdbcTemplate.update(
-                "UPDATE plans SET is_base_plan = true WHERE id = ? AND is_base_plan IS NULL",
-                UUID.fromString("11111111-1111-1111-1111-111111111111"));
-        if (updated > 0) {
-            log.info("Marked Free plan as base plan.");
-        }
     }
 
     /**

@@ -8,6 +8,7 @@ import lombok.experimental.SuperBuilder;
 import su26.uml.be.common.constant.enums.SubscriptionStatus;
 
 import java.time.LocalDateTime;
+import java.util.UUID;
 import su26.uml.be.features.user.entity.User;
 import su26.uml.be.features.plan.entity.Plan;
 
@@ -61,4 +62,16 @@ public class Subscription extends BaseEntity {
 
     @Column(name = "cancelled_at")
     LocalDateTime cancelledAt;
+
+    // ─── Booked downgrade (hướng A) ───
+    /**
+     * Gói sẽ tự động chuyển sang khi hết kỳ hiện tại (hạ cấp đã đặt). Không thu tiền ngay —
+     * user kích hoạt lại bằng POST /subscriptions/payment với pendingPlanId.
+     */
+    @Column(name = "pending_plan_id")
+    UUID pendingPlanId;
+
+    /** Thời điểm pendingPlanId có hiệu lực = endDate của kỳ đang chạy. */
+    @Column(name = "pending_effective_at")
+    LocalDateTime pendingEffectiveAt;
 }

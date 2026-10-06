@@ -8,18 +8,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import su26.uml.be.features.plan.entity.Plan;
 import su26.uml.be.features.plan.entity.PlanFeature;
-import su26.uml.be.features.subscription.entity.Subscription;
 import su26.uml.be.common.constant.enums.PlanFeatureKey;
-import su26.uml.be.common.constant.enums.PlanStatus;
-import su26.uml.be.common.constant.enums.SubscriptionStatus;
 import su26.uml.be.common.exception.AppException;
 import su26.uml.be.common.exception.ErrorCode;
-import su26.uml.be.features.plan.repository.PlanRepository;
-import su26.uml.be.features.subscription.repository.SubscriptionRepository;
 import su26.uml.be.features.user.repository.UserRepository;
 import su26.uml.be.features.plan.service.PlanLimitService;
+import su26.uml.be.features.plan.service.PlanResolutionService;
 
-import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
@@ -28,8 +23,7 @@ import java.util.UUID;
 @Slf4j
 public class PlanLimitServiceImpl implements PlanLimitService {
 
-    SubscriptionRepository subscriptionRepository;
-    PlanRepository planRepository;
+    PlanResolutionService planResolutionService;
     UserRepository userRepository;
 
     @Override
@@ -55,14 +49,9 @@ public class PlanLimitServiceImpl implements PlanLimitService {
                 .orElse(false);
     }
 
-    /** Gói hiện tại: subscription ACTIVE (chưa hết hạn) → gói; nếu không có → gói ACTIVE giá thấp nhất. */
+    /** Gói hiện tại — nguồn duy nhất: PlanResolutionService (paid sub -> gói; không có -> gói mặc định isDefaultPlan). */
     private Plan currentPlan(UUID userId) {
-        return subscriptionRepository
-                .findFirstByUser_IdAndStatusAndEndDateAfterOrderByEndDateDesc(userId, SubscriptionStatus.ACTIVE, LocalDateTime.now())
-                .map(Subscription::getPlan)
-                .orElseGet(() -> planRepository
-                        .findFirstByStatusOrderByPriceAscCreatedAtAsc(PlanStatus.ACTIVE)
-                        .orElse(null));
+        return planResolutionService.resolveEffectivePlan(userId).orElse(null);
     }
 
     /** Giá trị limit của key; null (chưa đặt) / không có gói → 0 (chặn). -1 = unlimited. */
