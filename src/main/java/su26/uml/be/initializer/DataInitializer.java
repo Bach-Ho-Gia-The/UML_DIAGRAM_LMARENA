@@ -197,7 +197,7 @@ public class DataInitializer implements CommandLineRunner {
                     sql,
                     UUID.fromString("22222222-2222-2222-2222-222222222222"),
                     "Education",
-                    29000,
+                    69000,
                     "Student plan (requires student verification).",
                     30,
                     30);
@@ -207,7 +207,7 @@ public class DataInitializer implements CommandLineRunner {
                     sql,
                     UUID.fromString("33333333-3333-3333-3333-333333333333"),
                     "Standard",
-                    49000,
+                    139000,
                     "For individual users.",
                     30,
                     60);
@@ -217,7 +217,7 @@ public class DataInitializer implements CommandLineRunner {
                     sql,
                     UUID.fromString("44444444-4444-4444-4444-444444444444"),
                     "Pro",
-                    99000,
+                    269000,
                     "For developers, business analysts and professionals.",
                     30,
                     100);
@@ -231,9 +231,9 @@ public class DataInitializer implements CommandLineRunner {
                 SET
                     price = CASE
                         WHEN id = '11111111-1111-1111-1111-111111111111' THEN 0
-                        WHEN id = '22222222-2222-2222-2222-222222222222' THEN 29000
-                        WHEN id = '33333333-3333-3333-3333-333333333333' THEN 49000
-                        WHEN id = '44444444-4444-4444-4444-444444444444' THEN 99000
+                        WHEN id = '22222222-2222-2222-2222-222222222222' THEN 69000
+                        WHEN id = '33333333-3333-3333-3333-333333333333' THEN 139000
+                        WHEN id = '44444444-4444-4444-4444-444444444444' THEN 269000
                         ELSE price
                     END,
                     max_diagrams = CASE
@@ -451,7 +451,7 @@ public class DataInitializer implements CommandLineRunner {
                 .status(SubscriptionStatus.ACTIVE)
                 .startDate(now.minusDays(15))
                 .endDate(now.plusDays(15))
-                .billingPriceSnapshot(new java.math.BigDecimal("49000"))
+                .billingPriceSnapshot(new java.math.BigDecimal("139000"))
                 .currencySnapshot("VND")
                 .billingCycleSnapshot("MONTHLY")
                 .nominalAiLimitSnapshot(600)

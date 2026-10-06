@@ -24,7 +24,7 @@ public class SocketIOConfig {
         config.setHostname(host);
         config.setPort(port);
         // Hỗ trợ CORS
-        config.setOrigin("*");
+        config.setOrigin(null);
         
         server = new SocketIOServer(config);
         server.start();
